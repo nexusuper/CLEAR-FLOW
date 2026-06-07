@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   try {
     db = await getDb();
   } catch (err) {
-    return res.status(500).json({ error: 'DB init failed', detail: err.message });
+    return res.status(500).json({ error: `DB init failed: ${err.message}` });
   }
 
   if (req.method === 'GET') {
