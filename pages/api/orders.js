@@ -1,10 +1,10 @@
-import { getDb, rowsToObjects } from '@/lib/db';
+import { initDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
-  let db;
+  let sql;
   try {
-    db = await getDb();
+    sql = await initDb();
   } catch (err) {
     return res.status(500).json({ error: `DB init failed: ${err.message}` });
   }
@@ -14,8 +14,12 @@ export default async function handler(req, res) {
     if (password !== process.env.ADMIN_PASSWORD) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    const result = await db.execute('SELECT * FROM orders ORDER BY created_at DESC');
-    return res.status(200).json(rowsToObjects(result));
+    try {
+      const rows = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
+      return res.status(200).json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: `Query failed: ${err.message}` });
+    }
   }
 
   if (req.method === 'POST') {
@@ -33,26 +37,30 @@ export default async function handler(req, res) {
 
     const id = uuidv4().slice(0, 8).toUpperCase();
     const created_at = new Date().toISOString();
+    const nc = need_container ? 1 : 0;
+    const cq = container_quantity || 0;
+    const gn = gcash_number || null;
+    const rn = reference_number || null;
+    const nt = notes || null;
 
     try {
-      await db.execute({
-        sql: `INSERT INTO orders (
+      await sql`
+        INSERT INTO orders (
           id, customer_name, phone, address, barangay,
           product_type, container_size, quantity,
           need_container, container_quantity,
           payment_method, gcash_number, reference_number,
           notes, total_amount, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          id, customer_name, phone, address, barangay,
-          product_type, container_size, quantity,
-          need_container ? 1 : 0, container_quantity || 0,
-          payment_method, gcash_number || null, reference_number || null,
-          notes || null, total_amount, created_at,
-        ],
-      });
+        ) VALUES (
+          ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
+          ${product_type}, ${container_size}, ${quantity},
+          ${nc}, ${cq},
+          ${payment_method}, ${gn}, ${rn},
+          ${nt}, ${total_amount}, ${created_at}
+        )
+      `;
     } catch (err) {
-      return res.status(500).json({ error: 'Insert failed', detail: err.message });
+      return res.status(500).json({ error: `Insert failed: ${err.message}` });
     }
 
     return res.status(201).json({ id, created_at });

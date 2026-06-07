@@ -1,4 +1,4 @@
-import { getDb, rowsToObjects } from '@/lib/db';
+import { initDb } from '@/lib/db';
 
 const MESSAGES = {
   confirmed: (name, id) =>
@@ -23,9 +23,9 @@ export default async function handler(req, res) {
   if (!orderId || !status) return res.status(400).json({ error: 'Missing orderId or status' });
   if (!MESSAGES[status]) return res.status(400).json({ error: 'No message for this status' });
 
-  const db = await getDb();
-  const result = await db.execute({ sql: 'SELECT * FROM orders WHERE id = ?', args: [orderId] });
-  const order = rowsToObjects(result)[0];
+  const sql = await initDb();
+  const rows = await sql`SELECT * FROM orders WHERE id = ${orderId}`;
+  const order = rows[0];
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
   const message = MESSAGES[status](order.customer_name, order.id);

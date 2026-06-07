@@ -1,15 +1,18 @@
-import { getDb, rowsToObjects } from '@/lib/db';
+import { initDb } from '@/lib/db';
 
 export default async function handler(req, res) {
-  const db = await getDb();
+  let sql;
+  try {
+    sql = await initDb();
+  } catch (err) {
+    return res.status(500).json({ error: `DB init failed: ${err.message}` });
+  }
+
   const { id } = req.query;
 
   if (req.method === 'GET') {
-    const result = await db.execute({
-      sql: 'SELECT * FROM orders WHERE id = ?',
-      args: [id],
-    });
-    const order = rowsToObjects(result)[0];
+    const rows = await sql`SELECT * FROM orders WHERE id = ${id}`;
+    const order = rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
     return res.status(200).json(order);
   }
@@ -24,7 +27,7 @@ export default async function handler(req, res) {
     if (!valid.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
-    await db.execute({ sql: 'UPDATE orders SET status = ? WHERE id = ?', args: [status, id] });
+    await sql`UPDATE orders SET status = ${status} WHERE id = ${id}`;
     return res.status(200).json({ success: true });
   }
 
