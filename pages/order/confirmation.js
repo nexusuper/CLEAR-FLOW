@@ -1,0 +1,114 @@
+import Layout from '@/components/Layout';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
+
+const STATUS_LABELS = {
+  pending: { label: 'Pending', color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
+  confirmed: { label: 'Confirmed', color: 'text-blue-600 bg-blue-50 border-blue-200' },
+  out_for_delivery: { label: 'Out for Delivery', color: 'text-orange-600 bg-orange-50 border-orange-200' },
+  delivered: { label: 'Delivered ✓', color: 'text-green-600 bg-green-50 border-green-200' },
+  cancelled: { label: 'Cancelled', color: 'text-red-600 bg-red-50 border-red-200' },
+};
+
+export default function Confirmation() {
+  const router = useRouter();
+  const { id } = router.query;
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!id) return;
+    fetch(`/api/orders/${id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) setError(d.error);
+        else setOrder(d);
+        setLoading(false);
+      })
+      .catch(() => { setError('Could not load order'); setLoading(false); });
+  }, [id]);
+
+  const status = order ? STATUS_LABELS[order.status] : null;
+
+  return (
+    <Layout title="Order Confirmed — Clear Flow">
+      <section className="bg-gradient-to-r from-sky-500 to-sky-400 text-white py-10 text-center">
+        <div className="text-5xl mb-2">✅</div>
+        <h1 className="text-3xl font-extrabold">Order Placed!</h1>
+        <p className="text-sky-100 mt-1">We received your order and will process it shortly.</p>
+      </section>
+
+      <div className="max-w-lg mx-auto px-4 py-10">
+        {loading && <p className="text-center text-gray-400">Loading order details...</p>}
+        {error && <p className="text-center text-red-500">{error}</p>}
+
+        {order && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-sky-100 text-center">
+              <p className="text-sm text-gray-500 mb-1">Your Order ID</p>
+              <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{order.id}</p>
+              <p className="text-xs text-gray-400 mt-1">Save this to track your order</p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-sky-100">
+              <h2 className="font-bold text-sky-800 mb-3">Order Details</h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Status</span>
+                  <span className={`font-semibold px-2 py-0.5 rounded-full border text-xs ${status?.color}`}>{status?.label}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Name</span>
+                  <span className="font-medium">{order.customer_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Phone</span>
+                  <span className="font-medium">{order.phone}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Address</span>
+                  <span className="font-medium text-right max-w-[60%]">{order.address}, {order.barangay}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Product</span>
+                  <span className="font-medium">{order.product_type} ({order.container_size})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Quantity</span>
+                  <span className="font-medium">{order.quantity} refill(s)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Payment</span>
+                  <span className="font-medium capitalize">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method}</span>
+                </div>
+                <div className="flex justify-between border-t border-sky-50 pt-2">
+                  <span className="text-gray-700 font-bold">Total</span>
+                  <span className="text-sky-600 font-bold">₱{order.total_amount}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-sky-50 rounded-2xl p-5 border border-sky-100 text-center text-sm text-sky-700">
+              📞 We will call you at <strong>{order.phone}</strong> before delivery.
+              <br />Expected: <strong>within 2–4 hours</strong> (or same day if ordered before 2PM).
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Link href={`/track?id=${order.id}`} className="block text-center bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-full transition-colors">
+                🔍 Track My Order
+              </Link>
+              <Link href="/order" className="block text-center border border-sky-300 text-sky-600 font-semibold py-3 rounded-full hover:bg-sky-50 transition-colors">
+                Place Another Order
+              </Link>
+              <Link href="/" className="block text-center text-gray-400 hover:text-gray-600 py-2 transition-colors text-sm">
+                Back to Home
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
