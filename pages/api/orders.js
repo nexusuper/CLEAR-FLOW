@@ -2,7 +2,12 @@ import { getDb, rowsToObjects } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
-  const db = await getDb();
+  let db;
+  try {
+    db = await getDb();
+  } catch (err) {
+    return res.status(500).json({ error: 'DB init failed', detail: err.message });
+  }
 
   if (req.method === 'GET') {
     const { password } = req.headers;
@@ -29,22 +34,26 @@ export default async function handler(req, res) {
     const id = uuidv4().slice(0, 8).toUpperCase();
     const created_at = new Date().toISOString();
 
-    await db.execute({
-      sql: `INSERT INTO orders (
-        id, customer_name, phone, address, barangay,
-        product_type, container_size, quantity,
-        need_container, container_quantity,
-        payment_method, gcash_number, reference_number,
-        notes, total_amount, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        id, customer_name, phone, address, barangay,
-        product_type, container_size, quantity,
-        need_container ? 1 : 0, container_quantity || 0,
-        payment_method, gcash_number || null, reference_number || null,
-        notes || null, total_amount, created_at,
-      ],
-    });
+    try {
+      await db.execute({
+        sql: `INSERT INTO orders (
+          id, customer_name, phone, address, barangay,
+          product_type, container_size, quantity,
+          need_container, container_quantity,
+          payment_method, gcash_number, reference_number,
+          notes, total_amount, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          id, customer_name, phone, address, barangay,
+          product_type, container_size, quantity,
+          need_container ? 1 : 0, container_quantity || 0,
+          payment_method, gcash_number || null, reference_number || null,
+          notes || null, total_amount, created_at,
+        ],
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'Insert failed', detail: err.message });
+    }
 
     return res.status(201).json({ id, created_at });
   }
