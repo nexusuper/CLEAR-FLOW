@@ -37,6 +37,9 @@ yarn-error.log*
 # local db
 /data
 
+# cave worktrees
+.cave/
+
 # vercel
 .vercel
 
