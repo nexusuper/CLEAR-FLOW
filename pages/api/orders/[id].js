@@ -31,5 +31,20 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true });
   }
 
+  if (req.method === 'DELETE') {
+    const { password } = req.headers;
+    if (password !== process.env.ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const rows = await sql`SELECT status FROM orders WHERE id = ${id}`;
+    const order = rows[0];
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!['delivered', 'cancelled'].includes(order.status)) {
+      return res.status(400).json({ error: 'Only delivered or cancelled orders can be deleted' });
+    }
+    await sql`DELETE FROM orders WHERE id = ${id}`;
+    return res.status(200).json({ success: true });
+  }
+
   res.status(405).json({ error: 'Method not allowed' });
 }
