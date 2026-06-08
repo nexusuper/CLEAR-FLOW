@@ -1,7 +1,8 @@
 import Layout from '@/components/Layout';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { trackPurchase } from '@/pages/_app';
 
 const STATUS_LABELS = {
   pending: { label: 'Pending', color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
@@ -18,13 +19,22 @@ export default function Confirmation() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const trackedRef = useRef(false);
+
   useEffect(() => {
     if (!id) return;
     fetch(`/api/orders/${id}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setError(d.error);
-        else setOrder(d);
+        else {
+          setOrder(d);
+          // Track purchase event once
+          if (!trackedRef.current && d.total_amount) {
+            trackPurchase(d.total_amount, 'PHP');
+            trackedRef.current = true;
+          }
+        }
         setLoading(false);
       })
       .catch(() => { setError('Could not load order'); setLoading(false); });

@@ -126,6 +126,8 @@ export default function AdminPanel() {
   const [updating, setUpdating] = useState(null);
   const [notifyModal, setNotifyModal] = useState(null);
   const [notifying, setNotifying] = useState(null);
+  const [messengerNotifying, setMessengerNotifying] = useState(null);
+  const [messengerResult, setMessengerResult] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [selected, setSelected] = useState([]);
@@ -166,6 +168,23 @@ export default function AdminPanel() {
     });
     setNotifyModal(await res.json());
     setNotifying(null);
+  }
+
+  async function notifyViaMessenger(orderId, status) {
+    setMessengerNotifying(orderId);
+    setMessengerResult(null);
+    try {
+      const res = await fetch('/api/messenger-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ orderId, status }),
+      });
+      const data = await res.json();
+      setMessengerResult(data);
+    } catch (e) {
+      setMessengerResult({ error: 'Network error' });
+    }
+    setMessengerNotifying(null);
   }
 
   async function deleteOrder(id) {
@@ -293,6 +312,21 @@ export default function AdminPanel() {
             </div>
           )}
 
+          {/* Messenger Result Toast */}
+          {messengerResult && (
+            <div className="fixed bottom-4 right-4 z-50 animate-pulse">
+              <div className={`rounded-xl shadow-lg p-4 max-w-sm ${messengerResult.success ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                <div className="flex items-center gap-2">
+                  <span>{messengerResult.success ? '✅' : '❌'}</span>
+                  <span className="font-medium">
+                    {messengerResult.success ? 'Messenger notification sent!' : messengerResult.message || messengerResult.error}
+                  </span>
+                  <button onClick={() => setMessengerResult(null)} className="ml-2 hover:opacity-70">✕</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Bulk Delete Modal */}
           {bulkDeleteModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -374,7 +408,10 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-4 py-3 font-mono font-bold text-sky-600">{o.id}</td>
                           <td className="px-4 py-3">
-                            <div className="font-medium text-gray-800">{o.customer_name}</div>
+                            <div className="font-medium text-gray-800 flex items-center gap-1">
+                              {o.customer_name}
+                              {o.messenger_psid && <span title="Messenger linked" className="text-blue-500">💬</span>}
+                            </div>
                             <div className="text-gray-400 text-xs">{o.phone}</div>
                           </td>
                           <td className="px-4 py-3 text-gray-600 max-w-[150px]">
@@ -406,9 +443,16 @@ export default function AdminPanel() {
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
                               {NOTIFIABLE_STATUSES.includes(o.status) && (
-                                <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Notify customer" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
-                                  {notifying === o.id ? '...' : '📨'}
-                                </button>
+                                <>
+                                  <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                                    {notifying === o.id ? '...' : '📱'}
+                                  </button>
+                                  {o.messenger_psid && (
+                                    <button onClick={() => notifyViaMessenger(o.id, o.status)} disabled={messengerNotifying === o.id} title="Send via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                                      {messengerNotifying === o.id ? '...' : '💬'}
+                                    </button>
+                                  )}
+                                </>
                               )}
                               {DELETABLE_STATUSES.includes(o.status) && (
                                 <button onClick={() => setDeleteModal(o)} title="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
