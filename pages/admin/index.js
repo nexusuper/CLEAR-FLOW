@@ -1,4 +1,8 @@
 import { useState, useMemo } from 'react';
+
+export async function getServerSideProps() {
+  return { props: {} };
+}
 import Head from 'next/head';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
@@ -45,6 +49,9 @@ export default function Admin() {
   const [notifying, setNotifying] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
 
   async function login(e) {
     e.preventDefault();
@@ -64,6 +71,7 @@ export default function Admin() {
   async function fetchOrders() {
     const res = await fetch('/api/orders', { headers: { password: savedPassword } });
     if (res.ok) setOrders(await res.json());
+    setSelected(new Set());
   }
 
   async function updateStatus(id, status) {
@@ -99,6 +107,37 @@ export default function Admin() {
     setDeleteModal(null);
   }
 
+  async function bulkDelete() {
+    setBulkDeleting(true);
+    await fetch('/api/orders/bulk-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', password: savedPassword },
+      body: JSON.stringify({ ids: Array.from(selected) }),
+    });
+    await fetchOrders();
+    setBulkDeleting(false);
+    setBulkDeleteModal(false);
+  }
+
+  const deletableInView = filtered.filter((o) => DELETABLE_STATUSES.includes(o.status));
+  const allDeletableSelected = deletableInView.length > 0 && deletableInView.every((o) => selected.has(o.id));
+
+  function toggleSelectAll() {
+    if (allDeletableSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(deletableInView.map((o) => o.id)));
+    }
+  }
+
+  function toggleSelect(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
   const filtered = useMemo(() => {
     let result = orders.filter((o) => {
       const matchFilter = filter === 'all' || o.status === filter;
@@ -115,14 +154,18 @@ export default function Admin() {
       return acc;
     }, []);
 
+    const sortDir = sortBy.endsWith('_asc') ? 'asc' : 'desc';
+    const sortField = sortBy.replace(/_asc$|_desc$/, '');
+
     result = [...result].sort((a, b) => {
-      let aVal, bVal;
-      if (field === 'created_at') { aVal = a.created_at; bVal = b.created_at; }
-      else if (field === 'total') { aVal = a.total_amount; bVal = b.total_amount; }
-      else if (field === 'name') { aVal = a.customer_name.toLowerCase(); bVal = b.customer_name.toLowerCase(); }
-      else if (field === 'status') { aVal = a.status; bVal = b.status; }
-      if (aVal < bVal) return dir === 'asc' ? -1 : 1;
-      if (aVal > bVal) return dir === 'asc' ? 1 : -1;
+      let aVal = '';
+      let bVal = '';
+      if (sortField === 'created_at') { aVal = a.created_at; bVal = b.created_at; }
+      else if (sortField === 'total') { aVal = a.total_amount; bVal = b.total_amount; }
+      else if (sortField === 'name') { aVal = a.customer_name.toLowerCase(); bVal = b.customer_name.toLowerCase(); }
+      else if (sortField === 'status') { aVal = a.status; bVal = b.status; }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
 
@@ -258,6 +301,33 @@ export default function Admin() {
             </div>
           )}
 
+          {/* Bulk Delete Modal */}
+          {bulkDeleteModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+              <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
+                <div className="text-3xl text-center mb-3">🗑️</div>
+                <h2 className="text-lg font-bold text-gray-800 text-center mb-1">Delete {selected.size} orders?</h2>
+                <p className="text-sm text-gray-500 text-center mb-4">All selected delivered & cancelled orders will be permanently removed.</p>
+                <p className="text-xs text-red-400 text-center mb-5">This cannot be undone.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBulkDeleteModal(false)}
+                    className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={bulkDelete}
+                    disabled={bulkDeleting}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50"
+                  >
+                    {bulkDeleting ? 'Deleting...' : `Delete ${selected.size}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Delete Confirm Modal */}
           {deleteModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -296,14 +366,33 @@ export default function Admin() {
               <div className="text-center py-12 text-gray-400">No orders found</div>
             ) : (
               <>
-                <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs text-gray-400">
-                  Showing {filtered.length} of {orders.length} orders
+                <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Showing {filtered.length} of {orders.length} orders</span>
+                  {selected.size > 0 && (
+                    <button
+                      onClick={() => setBulkDeleteModal(true)}
+                      className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1 rounded-full transition-colors"
+                    >
+                      🗑️ Delete {selected.size} selected
+                    </button>
+                  )}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">ID</th>
+                        <th className="px-4 py-3">
+                        {deletableInView.length > 0 && (
+                          <input
+                            type="checkbox"
+                            checked={allDeletableSelected}
+                            onChange={toggleSelectAll}
+                            title="Select all deletable"
+                            className="w-4 h-4 accent-red-500 cursor-pointer"
+                          />
+                        )}
+                      </th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">ID</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Customer</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Address</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Order</th>
@@ -316,7 +405,17 @@ export default function Admin() {
                     </thead>
                     <tbody>
                       {filtered.map((o, i) => (
-                        <tr key={o.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                        <tr key={o.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${selected.has(o.id) ? 'bg-red-50' : ''}`}>
+                          <td className="px-4 py-3">
+                            {DELETABLE_STATUSES.includes(o.status) && (
+                              <input
+                                type="checkbox"
+                                checked={selected.has(o.id)}
+                                onChange={() => toggleSelect(o.id)}
+                                className="w-4 h-4 accent-red-500 cursor-pointer"
+                              />
+                            )}
+                          </td>
                           <td className="px-4 py-3 font-mono font-bold text-sky-600">{o.id}</td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-gray-800">{o.customer_name}</div>
