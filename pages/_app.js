@@ -35,72 +35,63 @@ export default function App({ Component, pageProps }) {
     return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
 
+  // Initialize Facebook Messenger Chat Plugin
+  useEffect(() => {
+    if (!FB_PAGE_ID) return;
+
+    // Set up chatbox attributes
+    const chatbox = document.getElementById('fb-customer-chat');
+    if (chatbox) {
+      chatbox.setAttribute('page_id', FB_PAGE_ID);
+      chatbox.setAttribute('attribution', 'biz_inbox');
+    }
+
+    // Initialize FB SDK when loaded
+    window.fbAsyncInit = function() {
+      if (window.FB) {
+        window.FB.init({
+          xfbml: true,
+          version: 'v18.0'
+        });
+      }
+    };
+
+    // Load FB SDK if not already loaded
+    if (!document.getElementById('facebook-jssdk')) {
+      const script = document.createElement('script');
+      script.id = 'facebook-jssdk';
+      script.src = 'https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js';
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
   return (
     <>
       {/* Meta Pixel */}
       {FB_PIXEL_ID && (
-        <>
-          <Script
-            id="fb-pixel"
-            strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                !function(f,b,e,v,n,t,s)
-                {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-                n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-                if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-                n.queue=[];t=b.createElement(e);t.async=!0;
-                t.src=v;s=b.getElementsByTagName(e)[0];
-                s.parentNode.insertBefore(t,s)}(window, document,'script',
-                'https://connect.facebook.net/en_US/fbevents.js');
-                fbq('init', '${FB_PIXEL_ID}');
-                fbq('track', 'PageView');
-              `,
-            }}
-          />
-          <noscript>
-            <img
-              height="1"
-              width="1"
-              style={{ display: 'none' }}
-              src={`https://www.facebook.com/tr?id=${FB_PIXEL_ID}&ev=PageView&noscript=1`}
-              alt=""
-            />
-          </noscript>
-        </>
+        <Script
+          id="fb-pixel"
+          strategy="afterInteractive"
+          src="https://connect.facebook.net/en_US/fbevents.js"
+          onLoad={() => {
+            window.fbq('init', FB_PIXEL_ID);
+            window.fbq('track', 'PageView');
+          }}
+        />
       )}
 
-      {/* Facebook SDK for Messenger Chat Plugin */}
+      {/* Facebook Messenger Chat Plugin */}
       {FB_PAGE_ID && (
         <>
           <div id="fb-root"></div>
-          <div id="fb-customer-chat" className="fb-customerchat"></div>
-          <Script
-            id="fb-sdk"
-            strategy="lazyOnload"
-            dangerouslySetInnerHTML={{
-              __html: `
-                var chatbox = document.getElementById('fb-customer-chat');
-                chatbox.setAttribute("page_id", "${FB_PAGE_ID}");
-                chatbox.setAttribute("attribution", "biz_inbox");
-
-                window.fbAsyncInit = function() {
-                  FB.init({
-                    xfbml: true,
-                    version: 'v18.0'
-                  });
-                };
-
-                (function(d, s, id) {
-                  var js, fjs = d.getElementsByTagName(s)[0];
-                  if (d.getElementById(id)) return;
-                  js = d.createElement(s); js.id = id;
-                  js.src = 'https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js';
-                  fjs.parentNode.insertBefore(js, fjs);
-                }(document, 'script', 'facebook-jssdk'));
-              `,
-            }}
-          />
+          <div 
+            id="fb-customer-chat" 
+            className="fb-customerchat"
+            data-page_id={FB_PAGE_ID}
+            data-attribution="biz_inbox"
+          ></div>
         </>
       )}
 
