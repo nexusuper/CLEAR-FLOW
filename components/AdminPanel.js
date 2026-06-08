@@ -21,8 +21,8 @@ const STATUS_COLORS = {
 };
 
 const SORT_OPTIONS = [
-  { value: 'created_at_desc', label: 'Newest first' },
-  { value: 'created_at_asc', label: 'Oldest first' },
+  { value: 'date_desc', label: 'Newest first' },
+  { value: 'date_asc', label: 'Oldest first' },
   { value: 'total_desc', label: 'Total: High → Low' },
   { value: 'total_asc', label: 'Total: Low → High' },
   { value: 'name_asc', label: 'Name: A → Z' },
@@ -30,49 +30,125 @@ const SORT_OPTIONS = [
   { value: 'status_asc', label: 'Status' },
 ];
 
-export default function AdminPanel() {
+function getSortValue(order, field) {
+  if (field === 'date') return order.created_at;
+  if (field === 'total') return order.total_amount;
+  if (field === 'name') return order.customer_name.toLowerCase();
+  if (field === 'status') return order.status;
+  return '';
+}
+
+function applySort(list, sortBy) {
+  const parts = sortBy.split('_');
+  const dir = parts[parts.length - 1];
+  const field = parts.slice(0, -1).join('_');
+  return [...list].sort(function (a, b) {
+    var av = getSortValue(a, field);
+    var bv = getSortValue(b, field);
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
+function applyFilter(orders, filter, search) {
+  return orders.filter(function (o) {
+    var matchFilter = filter === 'all' || o.status === filter;
+    var q = search.toLowerCase();
+    var matchSearch = !search ||
+      o.customer_name.toLowerCase().includes(q) ||
+      o.phone.includes(search) ||
+      o.id.toLowerCase().includes(q);
+    return matchFilter && matchSearch;
+  });
+}
+
+function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
-  const [authed, setAuthed] = useState(false);
-  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('created_at_desc');
-  const [updating, setUpdating] = useState(null);
-  const [savedPassword, setSavedPassword] = useState('');
-  const [notifyModal, setNotifyModal] = useState(null);
-  const [notifying, setNotifying] = useState(null);
-  const [deleteModal, setDeleteModal] = useState(null);
-  const [deleting, setDeleting] = useState(null);
-  const [selected, setSelected] = useState(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
 
-  async function login(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError('');
     const res = await fetch('/api/orders', { headers: { password } });
     if (res.ok) {
-      setOrders(await res.json());
-      setSavedPassword(password);
-      setAuthed(true);
+      const data = await res.json();
+      onLogin(password, data);
     } else {
       setError('Invalid password');
     }
     setLoading(false);
   }
 
+  return (
+    <>
+      <Head><title>Admin — Clear Flow</title></Head>
+      <div className="min-h-screen bg-sky-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-md p-8 w-full max-w-sm">
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-2">🔒</div>
+            <h1 className="text-2xl font-bold text-sky-800">Admin Panel</h1>
+            <p className="text-gray-400 text-sm">Clear Flow Order Management</p>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter admin password"
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300"
+            />
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-full transition-colors"
+            >
+              {loading ? 'Logging in...' : 'Login'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default function AdminPanel() {
+  const [authed, setAuthed] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [savedPassword, setSavedPassword] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('date_desc');
+  const [updating, setUpdating] = useState(null);
+  const [notifyModal, setNotifyModal] = useState(null);
+  const [notifying, setNotifying] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
+
+  function handleLogin(password, data) {
+    setSavedPassword(password);
+    setOrders(data);
+    setAuthed(true);
+  }
+
   async function fetchOrders() {
     const res = await fetch('/api/orders', { headers: { password: savedPassword } });
-    if (res.ok) setOrders(await res.json());
-    setSelected(new Set());
+    if (res.ok) {
+      setOrders(await res.json());
+      setSelected([]);
+    }
   }
 
   async function updateStatus(id, status) {
     setUpdating(id);
-    await fetch(`/api/orders/${id}`, {
+    await fetch('/api/orders/' + id, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', password: savedPassword },
       body: JSON.stringify({ status }),
@@ -94,10 +170,7 @@ export default function AdminPanel() {
 
   async function deleteOrder(id) {
     setDeleting(id);
-    await fetch(`/api/orders/${id}`, {
-      method: 'DELETE',
-      headers: { password: savedPassword },
-    });
+    await fetch('/api/orders/' + id, { method: 'DELETE', headers: { password: savedPassword } });
     await fetchOrders();
     setDeleting(null);
     setDeleteModal(null);
@@ -108,100 +181,36 @@ export default function AdminPanel() {
     await fetch('/api/orders/bulk-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', password: savedPassword },
-      body: JSON.stringify({ ids: Array.from(selected) }),
+      body: JSON.stringify({ ids: selected }),
     });
     await fetchOrders();
     setBulkDeleting(false);
     setBulkDeleteModal(false);
   }
 
+  const filtered = useMemo(
+    function () { return applySort(applyFilter(orders, filter, search), sortBy); },
+    [orders, filter, search, sortBy]
+  );
+
   const deletableInView = filtered.filter((o) => DELETABLE_STATUSES.includes(o.status));
-  const allDeletableSelected = deletableInView.length > 0 && deletableInView.every((o) => selected.has(o.id));
+  const allSelected = deletableInView.length > 0 && deletableInView.every((o) => selected.includes(o.id));
 
   function toggleSelectAll() {
-    if (allDeletableSelected) {
-      setSelected(new Set());
+    if (allSelected) {
+      setSelected([]);
     } else {
-      setSelected(new Set(deletableInView.map((o) => o.id)));
+      setSelected(deletableInView.map((o) => o.id));
     }
   }
 
-  function toggleSelect(id) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  const filtered = useMemo(() => {
-    let result = orders.filter((o) => {
-      const matchFilter = filter === 'all' || o.status === filter;
-      const matchSearch =
-        !search ||
-        o.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-        o.phone.includes(search) ||
-        o.id.toLowerCase().includes(search.toLowerCase());
-      return matchFilter && matchSearch;
-    });
-
-    const [field, dir] = sortBy.split('_').reduce((acc, part, i, arr) => {
-      if (i === arr.length - 1) return [arr.slice(0, -1).join('_'), part];
-      return acc;
-    }, []);
-
-    const sortDir = sortBy.endsWith('_asc') ? 'asc' : 'desc';
-    const sortField = sortBy.replace(/_asc$|_desc$/, '');
-
-    result = [...result].sort((a, b) => {
-      let aVal = '';
-      let bVal = '';
-      if (sortField === 'created_at') { aVal = a.created_at; bVal = b.created_at; }
-      else if (sortField === 'total') { aVal = a.total_amount; bVal = b.total_amount; }
-      else if (sortField === 'name') { aVal = a.customer_name.toLowerCase(); bVal = b.customer_name.toLowerCase(); }
-      else if (sortField === 'status') { aVal = a.status; bVal = b.status; }
-      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [orders, filter, search, sortBy]);
-
-  if (!authed) {
-    return (
-      <>
-        <Head><title>Admin — Clear Flow</title></Head>
-        <div className="min-h-screen bg-sky-50 flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl shadow-md p-8 w-full max-w-sm">
-            <div className="text-center mb-6">
-              <div className="text-4xl mb-2">🔒</div>
-              <h1 className="text-2xl font-bold text-sky-800">Admin Panel</h1>
-              <p className="text-gray-400 text-sm">Clear Flow Order Management</p>
-            </div>
-            <form onSubmit={login} className="space-y-4">
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter admin password"
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300"
-              />
-              {error && <p className="text-red-500 text-sm">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-full transition-colors"
-              >
-                {loading ? 'Logging in...' : 'Login'}
-              </button>
-            </form>
-          </div>
-        </div>
-      </>
+  function toggleOne(id) {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }
+
+  if (!authed) return <LoginScreen onLogin={handleLogin} />;
 
   return (
     <>
@@ -231,21 +240,16 @@ export default function AdminPanel() {
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-            {STATUS_OPTIONS.map((s) => {
-              const count = orders.filter((o) => o.status === s.value).length;
-              return (
-                <button
-                  key={s.value}
-                  onClick={() => setFilter(filter === s.value ? 'all' : s.value)}
-                  className={`rounded-xl p-3 text-center border-2 transition-colors ${
-                    filter === s.value ? 'border-sky-500 bg-sky-50' : 'bg-white border-transparent'
-                  }`}
-                >
-                  <div className="text-2xl font-bold text-sky-700">{count}</div>
-                  <div className="text-xs text-gray-500">{s.label}</div>
-                </button>
-              );
-            })}
+            {STATUS_OPTIONS.map((s) => (
+              <button
+                key={s.value}
+                onClick={() => setFilter(filter === s.value ? 'all' : s.value)}
+                className={'rounded-xl p-3 text-center border-2 transition-colors ' + (filter === s.value ? 'border-sky-500 bg-sky-50' : 'bg-white border-transparent')}
+              >
+                <div className="text-2xl font-bold text-sky-700">{orders.filter((o) => o.status === s.value).length}</div>
+                <div className="text-xs text-gray-500">{s.label}</div>
+              </button>
+            ))}
           </div>
 
           {/* Search + Sort */}
@@ -262,9 +266,7 @@ export default function AdminPanel() {
               onChange={(e) => setSortBy(e.target.value)}
               className="border border-gray-200 rounded-lg px-4 py-2 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-sky-300"
             >
-              {SORT_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
+              {SORT_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
 
@@ -274,22 +276,16 @@ export default function AdminPanel() {
               <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full">
                 <h2 className="text-lg font-bold text-sky-800 mb-1">📋 Send Notification</h2>
                 <p className="text-sm text-gray-500 mb-3">
-                  Copy this message and send to <strong>{notifyModal.phone}</strong> via SMS, Viber, or Messenger:
+                  Copy and send to <strong>{notifyModal.phone}</strong> via SMS, Viber, or Messenger:
                 </p>
                 <div className="bg-sky-50 rounded-xl p-4 text-sm text-gray-700 mb-4 border border-sky-100 leading-relaxed">
                   {notifyModal.message}
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => navigator.clipboard.writeText(notifyModal.message)}
-                    className="flex-1 border border-sky-300 text-sky-600 font-semibold py-2 rounded-full hover:bg-sky-50 transition-colors text-sm"
-                  >
+                  <button onClick={() => navigator.clipboard.writeText(notifyModal.message)} className="flex-1 border border-sky-300 text-sky-600 font-semibold py-2 rounded-full hover:bg-sky-50 transition-colors text-sm">
                     Copy Message
                   </button>
-                  <button
-                    onClick={() => setNotifyModal(null)}
-                    className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 rounded-full transition-colors text-sm"
-                  >
+                  <button onClick={() => setNotifyModal(null)} className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 rounded-full transition-colors text-sm">
                     Done
                   </button>
                 </div>
@@ -302,53 +298,31 @@ export default function AdminPanel() {
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
               <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
                 <div className="text-3xl text-center mb-3">🗑️</div>
-                <h2 className="text-lg font-bold text-gray-800 text-center mb-1">Delete {selected.size} orders?</h2>
-                <p className="text-sm text-gray-500 text-center mb-4">All selected delivered & cancelled orders will be permanently removed.</p>
+                <h2 className="text-lg font-bold text-gray-800 text-center mb-2">Delete {selected.length} orders?</h2>
+                <p className="text-sm text-gray-500 text-center mb-2">All selected delivered & cancelled orders will be permanently removed.</p>
                 <p className="text-xs text-red-400 text-center mb-5">This cannot be undone.</p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setBulkDeleteModal(false)}
-                    className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={bulkDelete}
-                    disabled={bulkDeleting}
-                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50"
-                  >
-                    {bulkDeleting ? 'Deleting...' : `Delete ${selected.size}`}
+                  <button onClick={() => setBulkDeleteModal(false)} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors">Cancel</button>
+                  <button onClick={bulkDelete} disabled={bulkDeleting} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50">
+                    {bulkDeleting ? 'Deleting...' : 'Delete ' + selected.length}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Delete Confirm Modal */}
+          {/* Single Delete Modal */}
           {deleteModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
               <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
                 <div className="text-3xl text-center mb-3">🗑️</div>
                 <h2 className="text-lg font-bold text-gray-800 text-center mb-1">Delete Order?</h2>
-                <p className="text-sm text-gray-500 text-center mb-1">
-                  Order <span className="font-mono font-bold text-sky-600">{deleteModal.id}</span>
-                </p>
-                <p className="text-sm text-gray-500 text-center mb-5">
-                  {deleteModal.customer_name} — ₱{deleteModal.total_amount}
-                </p>
-                <p className="text-xs text-red-400 text-center mb-4">This cannot be undone.</p>
+                <p className="text-sm text-gray-500 text-center mb-1">Order <span className="font-mono font-bold text-sky-600">{deleteModal.id}</span></p>
+                <p className="text-sm text-gray-500 text-center mb-4">{deleteModal.customer_name} — ₱{deleteModal.total_amount}</p>
+                <p className="text-xs text-red-400 text-center mb-5">This cannot be undone.</p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setDeleteModal(null)}
-                    className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => deleteOrder(deleteModal.id)}
-                    disabled={deleting === deleteModal.id}
-                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={() => setDeleteModal(null)} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors">Cancel</button>
+                  <button onClick={() => deleteOrder(deleteModal.id)} disabled={deleting === deleteModal.id} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50">
                     {deleting === deleteModal.id ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
@@ -356,7 +330,7 @@ export default function AdminPanel() {
             </div>
           )}
 
-          {/* Orders table */}
+          {/* Orders Table */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {filtered.length === 0 ? (
               <div className="text-center py-12 text-gray-400">No orders found</div>
@@ -364,12 +338,9 @@ export default function AdminPanel() {
               <>
                 <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                   <span className="text-xs text-gray-400">Showing {filtered.length} of {orders.length} orders</span>
-                  {selected.size > 0 && (
-                    <button
-                      onClick={() => setBulkDeleteModal(true)}
-                      className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1 rounded-full transition-colors"
-                    >
-                      🗑️ Delete {selected.size} selected
+                  {selected.length > 0 && (
+                    <button onClick={() => setBulkDeleteModal(true)} className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1 rounded-full transition-colors">
+                      🗑️ Delete {selected.length} selected
                     </button>
                   )}
                 </div>
@@ -378,17 +349,11 @@ export default function AdminPanel() {
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
                         <th className="px-4 py-3">
-                        {deletableInView.length > 0 && (
-                          <input
-                            type="checkbox"
-                            checked={allDeletableSelected}
-                            onChange={toggleSelectAll}
-                            title="Select all deletable"
-                            className="w-4 h-4 accent-red-500 cursor-pointer"
-                          />
-                        )}
-                      </th>
-                      <th className="text-left px-4 py-3 font-semibold text-gray-600">ID</th>
+                          {deletableInView.length > 0 && (
+                            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-4 h-4 accent-red-500 cursor-pointer" />
+                          )}
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">ID</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Customer</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Address</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Order</th>
@@ -401,15 +366,10 @@ export default function AdminPanel() {
                     </thead>
                     <tbody>
                       {filtered.map((o, i) => (
-                        <tr key={o.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${selected.has(o.id) ? 'bg-red-50' : ''}`}>
+                        <tr key={o.id} className={(selected.includes(o.id) ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')}>
                           <td className="px-4 py-3">
                             {DELETABLE_STATUSES.includes(o.status) && (
-                              <input
-                                type="checkbox"
-                                checked={selected.has(o.id)}
-                                onChange={() => toggleSelect(o.id)}
-                                className="w-4 h-4 accent-red-500 cursor-pointer"
-                              />
+                              <input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleOne(o.id)} className="w-4 h-4 accent-red-500 cursor-pointer" />
                             )}
                           </td>
                           <td className="px-4 py-3 font-mono font-bold text-sky-600">{o.id}</td>
@@ -423,9 +383,7 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="text-gray-700">{o.product_type} x{o.quantity}</div>
-                            {o.need_container ? (
-                              <div className="text-gray-400 text-xs">+{o.container_quantity} container(s)</div>
-                            ) : null}
+                            {o.need_container ? <div className="text-gray-400 text-xs">+{o.container_quantity} container(s)</div> : null}
                           </td>
                           <td className="px-4 py-3">
                             <div className="uppercase text-xs font-semibold text-gray-600">{o.payment_method}</div>
@@ -433,40 +391,27 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-4 py-3 font-bold text-sky-600">₱{o.total_amount}</td>
                           <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                            {new Date(o.created_at).toLocaleDateString('en-PH', {
-                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                            })}
+                            {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </td>
                           <td className="px-4 py-3">
                             <select
                               value={o.status}
                               disabled={updating === o.id}
                               onChange={(e) => updateStatus(o.id, e.target.value)}
-                              className={`text-xs font-semibold px-2 py-1 rounded-full border-0 cursor-pointer ${STATUS_COLORS[o.status]}`}
+                              className={'text-xs font-semibold px-2 py-1 rounded-full border-0 cursor-pointer ' + STATUS_COLORS[o.status]}
                             >
-                              {STATUS_OPTIONS.map((s) => (
-                                <option key={s.value} value={s.value}>{s.label}</option>
-                              ))}
+                              {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                             </select>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
                               {NOTIFIABLE_STATUSES.includes(o.status) && (
-                                <button
-                                  onClick={() => notifyCustomer(o.id, o.status)}
-                                  disabled={notifying === o.id}
-                                  title="Notify customer"
-                                  className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50"
-                                >
+                                <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Notify customer" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
                                   {notifying === o.id ? '...' : '📨'}
                                 </button>
                               )}
                               {DELETABLE_STATUSES.includes(o.status) && (
-                                <button
-                                  onClick={() => setDeleteModal(o)}
-                                  title="Delete order"
-                                  className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors"
-                                >
+                                <button onClick={() => setDeleteModal(o)} title="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
                                   🗑️
                                 </button>
                               )}
