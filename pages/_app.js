@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 
 // Facebook Pixel helper
 export const FB_PIXEL_ID = process.env.NEXT_PUBLIC_FB_PIXEL_ID;
-export const FB_PAGE_ID = process.env.NEXT_PUBLIC_FB_PAGE_ID;
+export const FB_PAGE_ID = process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166';
 
 export const pageview = () => {
   if (typeof window !== 'undefined' && window.fbq) {
