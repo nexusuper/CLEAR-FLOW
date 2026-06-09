@@ -35,20 +35,6 @@ export default function App({ Component, pageProps }) {
     return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
 
-  // Initialize Facebook Messenger Chat Plugin
-  useEffect(() => {
-    if (!FB_PAGE_ID) return;
-
-    const chatbox = document.getElementById('fb-customer-chat');
-    if (chatbox) {
-      chatbox.setAttribute('page_id', FB_PAGE_ID);
-      chatbox.setAttribute('attribution', 'biz_inbox');
-    }
-
-    window.fbAsyncInit = function() {
-      FB.init({ xfbml: true, version: 'v18.0' });
-    };
-  }, []);
 
   return (
     <>
@@ -72,8 +58,26 @@ export default function App({ Component, pageProps }) {
           <div id="fb-customer-chat" className="fb-customerchat"></div>
           <Script
             id="fb-sdk"
-            src="https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js"
-            strategy="lazyOnload"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+                var chatbox = document.getElementById('fb-customer-chat');
+                if (chatbox) {
+                  chatbox.setAttribute('page_id', '${FB_PAGE_ID}');
+                  chatbox.setAttribute('attribution', 'biz_inbox');
+                }
+                window.fbAsyncInit = function() {
+                  FB.init({ xfbml: true, version: 'v18.0' });
+                };
+                (function(d, s, id) {
+                  var js, fjs = d.getElementsByTagName(s)[0];
+                  if (d.getElementById(id)) return;
+                  js = d.createElement(s); js.id = id;
+                  js.src = 'https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js';
+                  fjs.parentNode.insertBefore(js, fjs);
+                }(document, 'script', 'facebook-jssdk'));
+              `,
+            }}
           />
         </>
       )}
