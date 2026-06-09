@@ -39,32 +39,15 @@ export default function App({ Component, pageProps }) {
   useEffect(() => {
     if (!FB_PAGE_ID) return;
 
-    // Set up chatbox attributes
     const chatbox = document.getElementById('fb-customer-chat');
     if (chatbox) {
       chatbox.setAttribute('page_id', FB_PAGE_ID);
       chatbox.setAttribute('attribution', 'biz_inbox');
     }
 
-    // Initialize FB SDK when loaded
     window.fbAsyncInit = function() {
-      if (window.FB) {
-        window.FB.init({
-          xfbml: true,
-          version: 'v18.0'
-        });
-      }
+      FB.init({ xfbml: true, version: 'v18.0' });
     };
-
-    // Load FB SDK if not already loaded
-    if (!document.getElementById('facebook-jssdk')) {
-      const script = document.createElement('script');
-      script.id = 'facebook-jssdk';
-      script.src = 'https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js';
-      script.async = true;
-      script.defer = true;
-      document.body.appendChild(script);
-    }
   }, []);
 
   return (
@@ -86,12 +69,12 @@ export default function App({ Component, pageProps }) {
       {FB_PAGE_ID && (
         <>
           <div id="fb-root"></div>
-          <div 
-            id="fb-customer-chat" 
-            className="fb-customerchat"
-            data-page_id={FB_PAGE_ID}
-            data-attribution="biz_inbox"
-          ></div>
+          <div id="fb-customer-chat" className="fb-customerchat"></div>
+          <Script
+            id="fb-sdk"
+            src="https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js"
+            strategy="lazyOnload"
+          />
         </>
       )}
 
