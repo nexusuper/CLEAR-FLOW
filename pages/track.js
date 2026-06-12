@@ -70,7 +70,9 @@ export default function Track() {
   const router = useRouter();
   const { id: queryId } = router.query;
 
-  const [inputId, setInputId] = useState('');
+  // null = untouched, so the ?id= from the URL shows until the user types
+  const [typedId, setTypedId] = useState(null);
+  const inputId = typedId ?? (typeof queryId === 'string' ? queryId : '');
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -94,10 +96,8 @@ export default function Track() {
 
   // Auto-load from URL query
   useEffect(() => {
-    if (queryId) {
-      setInputId(queryId);
-      fetchOrder(queryId);
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-query-change
+    if (queryId) fetchOrder(queryId);
   }, [queryId, fetchOrder]);
 
   // Auto-refresh every 30s when tracking active order
@@ -129,7 +129,7 @@ export default function Track() {
           <div className="flex gap-2">
             <input
               value={inputId}
-              onChange={(e) => setInputId(e.target.value.toUpperCase())}
+              onChange={(e) => setTypedId(e.target.value.toUpperCase())}
               placeholder="e.g. A1B2C3D4"
               className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300 font-mono uppercase"
               maxLength={8}

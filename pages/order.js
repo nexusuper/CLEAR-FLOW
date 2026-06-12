@@ -24,7 +24,7 @@ export default function Order() {
     phone: '',
     address: '',
     barangay: '',
-    product_type: 'slim5',
+    product_type: '', // empty until the user picks; ?product= or the first product applies by default
     quantity: 1,
     need_container: false,
     container_quantity: 1,
@@ -54,11 +54,9 @@ export default function Order() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (queryProduct) setForm((f) => ({ ...f, product_type: queryProduct }));
-  }, [queryProduct]);
-
-  const selectedProduct = products.find((p) => p.id === form.product_type) || products[0];
+  // User's explicit choice wins; otherwise the ?product= link, otherwise the first product
+  const productType = form.product_type || (typeof queryProduct === 'string' ? queryProduct : '');
+  const selectedProduct = products.find((p) => p.id === productType) || products[0];
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
   const delivery = deliveryFee(form.quantity);
@@ -76,6 +74,7 @@ export default function Order() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          product_type: selectedProduct.id,
           container_size: selectedProduct.size,
           total_amount: grandTotal,
         }),
@@ -157,7 +156,7 @@ export default function Order() {
                     <label
                       key={p.id}
                       className={`flex items-center justify-between border rounded-xl px-4 py-3 cursor-pointer transition-colors ${
-                        form.product_type === p.id
+                        selectedProduct.id === p.id
                           ? 'border-sky-500 bg-sky-50'
                           : 'border-gray-200 hover:border-sky-200'
                       }`}
@@ -167,7 +166,7 @@ export default function Order() {
                           type="radio"
                           name="product_type"
                           value={p.id}
-                          checked={form.product_type === p.id}
+                          checked={selectedProduct.id === p.id}
                           onChange={() => set('product_type', p.id)}
                           className="accent-sky-500"
                         />
