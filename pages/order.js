@@ -2,7 +2,8 @@ import Layout from '@/components/Layout';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 
-const PRODUCTS = [
+// Fallback catalog while /api/products loads (or if it fails)
+const DEFAULT_PRODUCTS = [
   { id: 'slim5', name: '5-Gallon Slim', refill: 30, container: 150, size: '5-Gal' },
   { id: 'round5', name: '5-Gallon Round', refill: 35, container: 170, size: '5-Gal' },
   { id: 'round3', name: '3-Gallon Round', refill: 20, container: 100, size: '3-Gal' },
@@ -23,7 +24,7 @@ export default function Order() {
     phone: '',
     address: '',
     barangay: '',
-    product_type: 'slim5',
+    product_type: '', // empty until the user picks; ?product= or the first product applies by default
     quantity: 1,
     need_container: false,
     container_quantity: 1,
@@ -34,12 +35,28 @@ export default function Order() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [products, setProducts] = useState(DEFAULT_PRODUCTS);
 
   useEffect(() => {
-    if (queryProduct) setForm((f) => ({ ...f, product_type: queryProduct }));
-  }, [queryProduct]);
+    fetch('/api/products')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((rows) => {
+        if (rows && rows.length > 0) {
+          setProducts(rows.map((p) => ({
+            id: p.id,
+            name: p.name,
+            refill: Number(p.refill_price),
+            container: Number(p.container_price),
+            size: p.size || '',
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  const selectedProduct = PRODUCTS.find((p) => p.id === form.product_type) || PRODUCTS[0];
+  // User's explicit choice wins; otherwise the ?product= link, otherwise the first product
+  const productType = form.product_type || (typeof queryProduct === 'string' ? queryProduct : '');
+  const selectedProduct = products.find((p) => p.id === productType) || products[0];
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
   const delivery = deliveryFee(form.quantity);
@@ -57,6 +74,7 @@ export default function Order() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          product_type: selectedProduct.id,
           container_size: selectedProduct.size,
           total_amount: grandTotal,
         }),
@@ -134,11 +152,11 @@ export default function Order() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Product *</label>
                 <div className="grid grid-cols-1 gap-2">
-                  {PRODUCTS.map((p) => (
+                  {products.map((p) => (
                     <label
                       key={p.id}
                       className={`flex items-center justify-between border rounded-xl px-4 py-3 cursor-pointer transition-colors ${
-                        form.product_type === p.id
+                        selectedProduct.id === p.id
                           ? 'border-sky-500 bg-sky-50'
                           : 'border-gray-200 hover:border-sky-200'
                       }`}
@@ -148,7 +166,7 @@ export default function Order() {
                           type="radio"
                           name="product_type"
                           value={p.id}
-                          checked={form.product_type === p.id}
+                          checked={selectedProduct.id === p.id}
                           onChange={() => set('product_type', p.id)}
                           className="accent-sky-500"
                         />

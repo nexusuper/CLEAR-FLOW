@@ -1,7 +1,9 @@
 import Layout from '@/components/Layout';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 
-const products = [
+// Fallback catalog while /api/products loads (or if it fails)
+const DEFAULT_PRODUCTS = [
   {
     id: 'slim5',
     name: '5-Gallon Slim',
@@ -40,7 +42,31 @@ const deliveryRules = [
   { label: '5+ containers', fee: 'FREE' },
 ];
 
+const TAG_COLORS = ['bg-sky-500', 'bg-blue-500', 'bg-cyan-500', 'bg-teal-500'];
+
 export default function Products() {
+  const [products, setProducts] = useState(DEFAULT_PRODUCTS);
+
+  useEffect(() => {
+    fetch('/api/products')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((rows) => {
+        if (rows && rows.length > 0) {
+          setProducts(rows.map((p, i) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            refillPrice: Number(p.refill_price),
+            containerPrice: Number(p.container_price),
+            size: p.size || '',
+            tag: p.tag || 'Available',
+            tagColor: TAG_COLORS[i % TAG_COLORS.length],
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <Layout title="Products & Pricing — Clear Flow">
       {/* Header */}

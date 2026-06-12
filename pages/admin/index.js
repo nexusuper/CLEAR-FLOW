@@ -1,7 +1,12 @@
 import dynamic from 'next/dynamic';
+import AdminLayout from '@/components/admin/AdminLayout';
 
-const AdminPanel = dynamic(() => import('@/components/AdminPanel'), { ssr: false });
+const Dashboard = dynamic(() => import('@/components/admin/Dashboard'), { ssr: false });
 
-export default function AdminPage() {
-  return <AdminPanel />;
+export default function AdminDashboardPage() {
+  return (
+    <AdminLayout title="Dashboard">
+      <Dashboard />
+    </AdminLayout>
+  );
 }
