@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 
 // Facebook Pixel helper
 export const FB_PIXEL_ID = process.env.NEXT_PUBLIC_FB_PIXEL_ID;
-export const FB_PAGE_ID = process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166';
+export const FB_PAGE_ID = process.env.NEXT_PUBLIC_FB_PAGE_ID;
 
 export const pageview = () => {
   if (typeof window !== 'undefined' && window.fbq) {
@@ -29,12 +29,10 @@ export default function App({ Component, pageProps }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Track page views on route change
     const handleRouteChange = () => pageview();
     router.events.on('routeChangeComplete', handleRouteChange);
     return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
-
 
   return (
     <>
@@ -52,20 +50,21 @@ export default function App({ Component, pageProps }) {
       )}
 
       {/* Facebook Messenger Chat Plugin */}
+      {/* page_id set as React attribute — no template interpolation into script body */}
       {FB_PAGE_ID && (
         <>
           <div id="fb-root"></div>
-          <div id="fb-customer-chat" className="fb-customerchat"></div>
+          <div
+            id="fb-customer-chat"
+            className="fb-customerchat"
+            page_id={FB_PAGE_ID}
+            attribution="biz_inbox"
+          ></div>
           <Script
             id="fb-sdk"
             strategy="afterInteractive"
             dangerouslySetInnerHTML={{
               __html: `
-                var chatbox = document.getElementById('fb-customer-chat');
-                if (chatbox) {
-                  chatbox.setAttribute('page_id', '${FB_PAGE_ID}');
-                  chatbox.setAttribute('attribution', 'biz_inbox');
-                }
                 window.fbAsyncInit = function() {
                   FB.init({ xfbml: true, version: 'v18.0' });
                 };

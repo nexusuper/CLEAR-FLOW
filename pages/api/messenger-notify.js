@@ -1,5 +1,5 @@
-// Send order notification via Facebook Messenger
 import { initDb } from '@/lib/db';
+import { checkAdminAuth } from '@/lib/auth';
 import { sendMessengerMessage } from '@/lib/facebook';
 
 const MESSAGES = {
@@ -14,54 +14,32 @@ const MESSAGES = {
 };
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Auth check
-  const { password } = req.headers;
-  if (password !== process.env.ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!checkAdminAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
 
   const { orderId, status } = req.body;
-  if (!orderId || !status) {
-    return res.status(400).json({ error: 'Missing orderId or status' });
-  }
-  if (!MESSAGES[status]) {
-    return res.status(400).json({ error: 'No message template for this status' });
-  }
+  if (!orderId || !status) return res.status(400).json({ error: 'Missing orderId or status' });
+  if (!MESSAGES[status]) return res.status(400).json({ error: 'No message template for this status' });
 
   try {
     const sql = await initDb();
-    const rows = await sql`SELECT * FROM orders WHERE id = ${orderId}`;
+    const rows = await sql`SELECT customer_name, id, messenger_psid FROM orders WHERE id = ${orderId}`;
     const order = rows[0];
 
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
     if (!order.messenger_psid) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'No Messenger linked',
         message: 'Customer has not linked their Messenger account. Use SMS instead.',
       });
     }
 
     const messageText = MESSAGES[status](order.customer_name, order.id);
-    
     await sendMessengerMessage(order.messenger_psid, messageText);
 
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Notification sent via Messenger',
-    });
-
-  } catch (error) {
-    console.error('Messenger notify error:', error);
-    return res.status(500).json({ 
-      error: 'Failed to send notification',
-      message: error.message,
-    });
+    return res.status(200).json({ success: true, message: 'Notification sent via Messenger' });
+  } catch {
+    return res.status(500).json({ error: 'Failed to send notification' });
   }
 }
