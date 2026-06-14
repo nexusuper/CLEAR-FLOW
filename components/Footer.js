@@ -27,6 +27,10 @@ export default function Footer() {
             </ul>
           </div>
         </div>
+        <div className="mt-6 flex items-center justify-center gap-2 text-center text-sm font-semibold text-clay-skydeep">
+          <ClayIcon name="chat" className="w-5 h-5 text-clay-sky shrink-0" />
+          Questions or concerns? Message us on Facebook using the chat button in the corner.
+        </div>
         <div className="border-t border-sky-100 text-center text-clay-muted text-xs pt-5 mt-6">
           © {new Date().getFullYear()} Clear Flow. All rights reserved.
         </div>

@@ -4,6 +4,7 @@ import PurifyProcess from '@/components/PurifyProcess';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
+import { FB_PAGE_ID } from '@/pages/_app';
 
 const features = [
   { icon: 'lock', title: 'No Login Required', desc: 'Order as a guest. We just need your name, address, and phone number.' },
@@ -75,6 +76,30 @@ export default function Home() {
           <h2 className="text-3xl font-bold mb-3">Ready to Order?</h2>
           <p className="text-sky-50 font-semibold mb-7">It takes less than 2 minutes. No account, no hassle.</p>
           <ClayButton href="/order" variant="white" size="lg">Place Your Order</ClayButton>
+        </ClayCard>
+      </section>
+
+      <section className="px-4 pb-16">
+        <ClayCard className="max-w-3xl mx-auto p-8 md:p-10 text-center">
+          <div className="mx-auto mb-4 grid place-items-center w-16 h-16 rounded-[22px] clay-raised-sm"
+               style={{ background: 'linear-gradient(145deg,#3b9dff,#0084ff)' }}>
+            <ClayIcon name="chat" className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-clay-ink mb-2">Questions, or concerns?</h2>
+          <p className="text-clay-muted font-semibold mb-6 max-w-md mx-auto">
+            Message us on Facebook anytime — just tap the blue <span className="text-clay-ink2 font-bold">chat button</span> in the bottom-right corner, or message us directly below.
+          </p>
+          {FB_PAGE_ID && (
+            <a
+              href={`https://m.me/${FB_PAGE_ID}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-4 text-lg font-display font-semibold text-white clay-pressable"
+              style={{ background: 'linear-gradient(145deg,#3b9dff,#0084ff)', boxShadow: '5px 5px 12px #b3c9e6, -3px -3px 8px #ffffff' }}
+            >
+              <ClayIcon name="chat" className="w-5 h-5" /> Chat on Messenger
+            </a>
+          )}
         </ClayCard>
       </section>
     </Layout>
