@@ -1,5 +1,6 @@
 import { initDb } from '@/lib/db';
-import { checkAdminAuth } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
+import { TRANSITIONS } from '@/lib/order-status';
 
 const SAFE_PUBLIC_FIELDS = [
   'id', 'customer_name', 'phone', 'address', 'barangay',
@@ -7,14 +8,6 @@ const SAFE_PUBLIC_FIELDS = [
   'need_container', 'container_quantity',
   'payment_method', 'total_amount', 'created_at', 'status',
 ];
-
-const TRANSITIONS = {
-  pending:          ['confirmed', 'cancelled'],
-  confirmed:        ['out_for_delivery', 'cancelled'],
-  out_for_delivery: ['delivered', 'cancelled'],
-  delivered:        [],
-  cancelled:        [],
-};
 
 export default async function handler(req, res) {
   let sql;
@@ -38,7 +31,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!checkAdminAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
+  if (!requireAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
 
   if (req.method === 'PATCH') {
     const { status } = req.body;

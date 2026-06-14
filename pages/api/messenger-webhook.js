@@ -63,6 +63,7 @@ export default async function handler(req, res) {
     for (const entry of body.entry || []) {
       for (const event of entry.messaging || []) {
         const senderPsid = event.sender?.id;
+        if (!senderPsid) continue;
         if (event.message?.text) {
           await handleMessage(senderPsid, event.message.text);
         }

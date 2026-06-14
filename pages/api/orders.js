@@ -1,5 +1,6 @@
 import { initDb } from '@/lib/db';
-import { checkAdminAuth } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { PRODUCTS, VALID_PAYMENT_METHODS, calculateTotal } from '@/lib/pricing';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -12,7 +13,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
-    if (!checkAdminAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
+    if (!requireAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
     try {
       const rows = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
       return res.status(200).json(rows);
@@ -22,6 +23,13 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // Throttle order spam: 15 orders per IP per 10 minutes.
+    const { allowed, retryAfter } = rateLimit(`order:${getClientIp(req)}`, 15, 10 * 60 * 1000);
+    if (!allowed) {
+      res.setHeader('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: 'Too many orders. Please try again later.' });
+    }
+
     const {
       customer_name, phone, address, barangay,
       product_type, container_size,

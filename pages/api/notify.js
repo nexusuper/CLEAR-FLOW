@@ -1,5 +1,5 @@
 import { initDb } from '@/lib/db';
-import { checkAdminAuth } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 
 const MESSAGES = {
   confirmed: (name, id) =>
@@ -14,7 +14,7 @@ const MESSAGES = {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!checkAdminAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
+  if (!requireAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
 
   const { orderId, status } = req.body;
   if (!orderId || !status) return res.status(400).json({ error: 'Missing orderId or status' });

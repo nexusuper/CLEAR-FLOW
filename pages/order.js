@@ -36,7 +36,9 @@ export default function Order() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (queryProduct) setForm((f) => ({ ...f, product_type: queryProduct }));
+    if (queryProduct && PRODUCTS.some((p) => p.id === queryProduct)) {
+      setForm((f) => ({ ...f, product_type: queryProduct }));
+    }
   }, [queryProduct]);
 
   const selectedProduct = PRODUCTS.find((p) => p.id === form.product_type) || PRODUCTS[0];

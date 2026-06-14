@@ -110,8 +110,8 @@ export default function Track() {
   function handleSubmit(e) {
     e.preventDefault();
     if (!inputId.trim()) return;
+    // Navigating updates the query, which triggers the fetch effect — avoids a double request.
     router.push(`/track?id=${inputId.trim().toUpperCase()}`, undefined, { shallow: true });
-    fetchOrder(inputId.trim());
   }
 
   return (

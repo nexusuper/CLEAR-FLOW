@@ -1,8 +1,6 @@
 import { useState, useMemo } from 'react';
 import Head from 'next/head';
-
-const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
-const DELETABLE_STATUSES = ['delivered', 'cancelled'];
+import { nextStatuses, DELETABLE_STATUSES, NOTIFIABLE_STATUSES } from '@/lib/order-status';
 
 const STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
@@ -72,12 +70,22 @@ function LoginScreen({ onLogin }) {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const res = await fetch('/api/orders', { headers: { password } });
-    if (res.ok) {
-      const data = await res.json();
-      onLogin(password, data);
-    } else {
-      setError('Invalid password');
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onLogin(data.token);
+      } else if (res.status === 429) {
+        setError('Too many attempts. Please wait and try again.');
+      } else {
+        setError('Invalid password');
+      }
+    } catch {
+      setError('Network error. Please try again.');
     }
     setLoading(false);
   }
@@ -119,7 +127,7 @@ function LoginScreen({ onLogin }) {
 export default function AdminPanel() {
   const [authed, setAuthed] = useState(false);
   const [orders, setOrders] = useState([]);
-  const [savedPassword, setSavedPassword] = useState('');
+  const [token, setToken] = useState('');
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date_desc');
@@ -127,82 +135,139 @@ export default function AdminPanel() {
   const [notifyModal, setNotifyModal] = useState(null);
   const [notifying, setNotifying] = useState(null);
   const [messengerNotifying, setMessengerNotifying] = useState(null);
-  const [messengerResult, setMessengerResult] = useState(null);
+  const [toast, setToast] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [selected, setSelected] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
 
-  function handleLogin(password, data) {
-    setSavedPassword(password);
-    setOrders(data);
-    setAuthed(true);
+  function authHeaders(tok = token, json = false) {
+    const h = { Authorization: 'Bearer ' + tok };
+    if (json) h['Content-Type'] = 'application/json';
+    return h;
   }
 
-  async function fetchOrders() {
-    const res = await fetch('/api/orders', { headers: { password: savedPassword } });
-    if (res.ok) {
-      setOrders(await res.json());
-      setSelected([]);
+  function handleLogin(tok) {
+    setToken(tok);
+    setAuthed(true);
+    fetchOrders(tok);
+  }
+
+  function handleLogout(message) {
+    setAuthed(false);
+    setOrders([]);
+    setToken('');
+    setSelected([]);
+    if (message) setToast({ error: message });
+  }
+
+  async function fetchOrders(tok = token) {
+    try {
+      const res = await fetch('/api/orders', { headers: authHeaders(tok) });
+      if (res.status === 401) return handleLogout('Session expired. Please log in again.');
+      if (res.ok) {
+        setOrders(await res.json());
+        setSelected([]);
+      } else {
+        setToast({ error: 'Failed to load orders' });
+      }
+    } catch {
+      setToast({ error: 'Network error' });
     }
   }
 
   async function updateStatus(id, status) {
     setUpdating(id);
-    await fetch('/api/orders/' + id, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', password: savedPassword },
-      body: JSON.stringify({ status }),
-    });
-    await fetchOrders();
+    try {
+      const res = await fetch('/api/orders/' + id, {
+        method: 'PATCH',
+        headers: authHeaders(token, true),
+        body: JSON.stringify({ status }),
+      });
+      if (res.status === 401) { handleLogout('Session expired. Please log in again.'); setUpdating(null); return; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ error: data.error || 'Failed to update status' });
+      }
+      await fetchOrders();
+    } catch {
+      setToast({ error: 'Network error' });
+    }
     setUpdating(null);
   }
 
   async function notifyCustomer(orderId, status) {
     setNotifying(orderId);
-    const res = await fetch('/api/notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', password: savedPassword },
-      body: JSON.stringify({ orderId, status }),
-    });
-    setNotifyModal(await res.json());
+    try {
+      const res = await fetch('/api/notify', {
+        method: 'POST',
+        headers: authHeaders(token, true),
+        body: JSON.stringify({ orderId, status }),
+      });
+      if (res.status === 401) { handleLogout('Session expired. Please log in again.'); setNotifying(null); return; }
+      if (res.ok) setNotifyModal(await res.json());
+      else setToast({ error: 'Failed to generate message' });
+    } catch {
+      setToast({ error: 'Network error' });
+    }
     setNotifying(null);
   }
 
   async function notifyViaMessenger(orderId, status) {
     setMessengerNotifying(orderId);
-    setMessengerResult(null);
+    setToast(null);
     try {
       const res = await fetch('/api/messenger-notify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        headers: authHeaders(token, true),
         body: JSON.stringify({ orderId, status }),
       });
+      if (res.status === 401) { handleLogout('Session expired. Please log in again.'); setMessengerNotifying(null); return; }
       const data = await res.json();
-      setMessengerResult(data);
-    } catch (e) {
-      setMessengerResult({ error: 'Network error' });
+      setToast(data);
+    } catch {
+      setToast({ error: 'Network error' });
     }
     setMessengerNotifying(null);
   }
 
   async function deleteOrder(id) {
     setDeleting(id);
-    await fetch('/api/orders/' + id, { method: 'DELETE', headers: { password: savedPassword } });
-    await fetchOrders();
+    try {
+      const res = await fetch('/api/orders/' + id, { method: 'DELETE', headers: authHeaders() });
+      if (res.status === 401) { handleLogout('Session expired. Please log in again.'); setDeleting(null); setDeleteModal(null); return; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ error: data.error || 'Failed to delete order' });
+      }
+      await fetchOrders();
+    } catch {
+      setToast({ error: 'Network error' });
+    }
     setDeleting(null);
     setDeleteModal(null);
   }
 
   async function bulkDelete() {
     setBulkDeleting(true);
-    await fetch('/api/orders/bulk-delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', password: savedPassword },
-      body: JSON.stringify({ ids: selected }),
-    });
-    await fetchOrders();
+    try {
+      const res = await fetch('/api/orders/bulk-delete', {
+        method: 'POST',
+        headers: authHeaders(token, true),
+        body: JSON.stringify({ ids: selected }),
+      });
+      if (res.status === 401) { handleLogout('Session expired. Please log in again.'); setBulkDeleting(false); setBulkDeleteModal(false); return; }
+      if (res.ok) {
+        const data = await res.json();
+        setToast({ success: true, message: `Deleted ${data.deleted} order(s)` });
+      } else {
+        setToast({ error: 'Failed to delete orders' });
+      }
+      await fetchOrders();
+    } catch {
+      setToast({ error: 'Network error' });
+    }
     setBulkDeleting(false);
     setBulkDeleteModal(false);
   }
@@ -247,7 +312,7 @@ export default function AdminPanel() {
               ↻ Refresh
             </button>
             <button
-              onClick={() => { setAuthed(false); setOrders([]); setSavedPassword(''); }}
+              onClick={() => handleLogout()}
               className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm transition-colors"
             >
               Logout
@@ -312,16 +377,16 @@ export default function AdminPanel() {
             </div>
           )}
 
-          {/* Messenger Result Toast */}
-          {messengerResult && (
-            <div className="fixed bottom-4 right-4 z-50 animate-pulse">
-              <div className={`rounded-xl shadow-lg p-4 max-w-sm ${messengerResult.success ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+          {/* Action Result Toast */}
+          {toast && (
+            <div className="fixed bottom-4 right-4 z-50">
+              <div className={`rounded-xl shadow-lg p-4 max-w-sm ${toast.success ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
                 <div className="flex items-center gap-2">
-                  <span>{messengerResult.success ? '✅' : '❌'}</span>
+                  <span>{toast.success ? '✅' : '❌'}</span>
                   <span className="font-medium">
-                    {messengerResult.success ? 'Messenger notification sent!' : messengerResult.message || messengerResult.error}
+                    {toast.success ? (toast.message || 'Success') : (toast.message || toast.error || 'Something went wrong')}
                   </span>
-                  <button onClick={() => setMessengerResult(null)} className="ml-2 hover:opacity-70">✕</button>
+                  <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">✕</button>
                 </div>
               </div>
             </div>
@@ -431,14 +496,22 @@ export default function AdminPanel() {
                             {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </td>
                           <td className="px-4 py-3">
-                            <select
-                              value={o.status}
-                              disabled={updating === o.id}
-                              onChange={(e) => updateStatus(o.id, e.target.value)}
-                              className={'text-xs font-semibold px-2 py-1 rounded-full border-0 cursor-pointer ' + STATUS_COLORS[o.status]}
-                            >
-                              {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                            </select>
+                            {(() => {
+                              const allowed = [o.status, ...nextStatuses(o.status)];
+                              const terminal = nextStatuses(o.status).length === 0;
+                              return (
+                                <select
+                                  value={o.status}
+                                  disabled={updating === o.id || terminal}
+                                  onChange={(e) => updateStatus(o.id, e.target.value)}
+                                  className={'text-xs font-semibold px-2 py-1 rounded-full border-0 cursor-pointer disabled:cursor-default ' + STATUS_COLORS[o.status]}
+                                >
+                                  {STATUS_OPTIONS.filter((s) => allowed.includes(s.value)).map((s) => (
+                                    <option key={s.value} value={s.value}>{s.label}</option>
+                                  ))}
+                                </select>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
