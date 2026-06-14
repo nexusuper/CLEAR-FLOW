@@ -10,6 +10,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Build artifacts inside cave worktrees (not part of the source tree):
+    "**/.next/**",
+    ".cave/**",
   ]),
 ]);
 
