@@ -1,13 +1,15 @@
 import Layout from '@/components/Layout';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import Link from 'next/link';
+import ClayCard from '@/components/ui/ClayCard';
+import ClayButton from '@/components/ui/ClayButton';
+import ClayIcon from '@/components/ui/ClayIcon';
 
 const STEPS = [
-  { key: 'pending', label: 'Order Received', icon: '📋', desc: 'Your order is in our queue.' },
-  { key: 'confirmed', label: 'Confirmed', icon: '✅', desc: 'We\'ve confirmed your order and are preparing your water.' },
-  { key: 'out_for_delivery', label: 'Out for Delivery', icon: '🛵', desc: 'Your water is on its way!' },
-  { key: 'delivered', label: 'Delivered', icon: '🎉', desc: 'Your order has been delivered. Enjoy!' },
+  { key: 'pending', label: 'Order Received', icon: 'clipboard', desc: 'Your order is in our queue.' },
+  { key: 'confirmed', label: 'Confirmed', icon: 'check', desc: 'We\'ve confirmed your order and are preparing your water.' },
+  { key: 'out_for_delivery', label: 'Out for Delivery', icon: 'truck', desc: 'Your water is on its way!' },
+  { key: 'delivered', label: 'Delivered', icon: 'party', desc: 'Your order has been delivered. Enjoy!' },
 ];
 
 const STATUS_ORDER = ['pending', 'confirmed', 'out_for_delivery', 'delivered'];
@@ -19,7 +21,7 @@ function StatusStepper({ status }) {
   if (isCancelled) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
-        <div className="text-4xl mb-2">❌</div>
+        <ClayIcon name="cancel" className="w-10 h-10 mx-auto text-red-500" />
         <p className="text-red-700 font-semibold">This order has been cancelled.</p>
         <p className="text-red-400 text-sm mt-1">Please contact us if you have questions.</p>
       </div>
@@ -36,14 +38,8 @@ function StatusStepper({ status }) {
           <div key={step.key} className="flex gap-4">
             {/* Line + circle */}
             <div className="flex flex-col items-center">
-              <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 transition-colors ${
-                  done ? 'bg-sky-500 text-white' :
-                  active ? 'bg-sky-500 text-white ring-4 ring-sky-100' :
-                  'bg-gray-100 text-gray-400'
-                }`}
-              >
-                {done ? '✓' : step.icon}
+              <div className={`w-10 h-10 rounded-full grid place-items-center shrink-0 ${done || active ? 'clay-btn-primary text-white' : 'clay-inset text-clay-muted'} ${active ? 'ring-4 ring-sky-100' : ''}`}>
+                <ClayIcon name={done ? 'check' : step.icon} className="w-5 h-5" />
               </div>
               {i < STEPS.length - 1 && (
                 <div className={`w-0.5 flex-1 my-1 ${done ? 'bg-sky-400' : 'bg-gray-200'}`} style={{ minHeight: '2rem' }} />
@@ -51,12 +47,12 @@ function StatusStepper({ status }) {
             </div>
             {/* Content */}
             <div className={`pb-6 ${i === STEPS.length - 1 ? 'pb-0' : ''}`}>
-              <p className={`font-bold ${active ? 'text-sky-700' : done ? 'text-sky-500' : 'text-gray-400'}`}>
+              <p className={`font-bold ${active ? 'text-clay-skydeep' : done ? 'text-clay-ink2' : 'text-clay-muted'}`}>
                 {step.label}
                 {active && <span className="ml-2 text-xs bg-sky-100 text-sky-600 px-2 py-0.5 rounded-full">Current</span>}
               </p>
               {!upcoming && (
-                <p className={`text-sm mt-0.5 ${active ? 'text-gray-600' : 'text-gray-400'}`}>{step.desc}</p>
+                <p className={`text-sm mt-0.5 ${active ? 'text-clay-ink2' : 'text-clay-muted'}`}>{step.desc}</p>
               )}
             </div>
           </div>
@@ -116,28 +112,30 @@ export default function Track() {
 
   return (
     <Layout title="Track Your Order — Clear Flow">
-      <section className="bg-gradient-to-r from-sky-500 to-sky-400 text-white py-10 text-center">
-        <div className="text-4xl mb-2">🔍</div>
-        <h1 className="text-3xl font-extrabold">Track Your Order</h1>
-        <p className="text-sky-100 mt-1">Enter your Order ID to see your delivery status.</p>
+      <section className="px-4 pt-8">
+        <ClayCard className="max-w-lg mx-auto py-10 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
+          <ClayIcon name="search" className="w-10 h-10 mx-auto mb-2" />
+          <h1 className="text-3xl font-extrabold">Track Your Order</h1>
+          <p className="text-sky-50 font-semibold mt-1">Enter your Order ID to see your delivery status.</p>
+        </ClayCard>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
         {/* Search form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-6 shadow-sm border border-sky-100">
+        <form onSubmit={handleSubmit} className="clay-raised rounded-3xl p-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Order ID</label>
           <div className="flex gap-2">
             <input
               value={inputId}
               onChange={(e) => setInputId(e.target.value.toUpperCase())}
               placeholder="e.g. A1B2C3D4"
-              className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300 font-mono uppercase"
+              className="clay-input flex-1 font-mono uppercase"
               maxLength={8}
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-5 py-2.5 rounded-lg transition-colors disabled:bg-sky-300"
+              className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-display font-semibold disabled:opacity-60"
             >
               {loading ? '...' : 'Track'}
             </button>
@@ -148,24 +146,24 @@ export default function Track() {
         {/* Order status */}
         {order && (
           <>
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-sky-100">
+            <div className="clay-raised rounded-3xl p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Order ID</p>
+                  <p className="text-xs text-clay-muted mb-0.5">Order ID</p>
                   <p className="font-mono font-extrabold text-sky-600 text-xl tracking-widest">{order.id}</p>
                 </div>
                 <button
                   onClick={() => fetchOrder(order.id)}
                   className="text-sky-500 hover:text-sky-700 text-sm font-medium"
                 >
-                  ↻ Refresh
+                  <ClayIcon name="refresh" className="w-4 h-4 inline" /> Refresh
                 </button>
               </div>
 
-              <div className="text-sm text-gray-500 mb-5 space-y-1">
-                <div><span className="font-medium text-gray-700">Name:</span> {order.customer_name}</div>
-                <div><span className="font-medium text-gray-700">Address:</span> {order.address}, {order.barangay}</div>
-                <div><span className="font-medium text-gray-700">Total:</span> <span className="text-sky-600 font-bold">₱{order.total_amount}</span></div>
+              <div className="text-sm text-clay-muted mb-5 space-y-1">
+                <div><span className="font-medium text-clay-ink2">Name:</span> {order.customer_name}</div>
+                <div><span className="font-medium text-clay-ink2">Address:</span> {order.address}, {order.barangay}</div>
+                <div><span className="font-medium text-clay-ink2">Total:</span> <span className="text-sky-600 font-bold">₱{order.total_amount}</span></div>
               </div>
 
               <StatusStepper status={order.status} />
@@ -179,18 +177,14 @@ export default function Track() {
             </div>
 
             {(order.status !== 'delivered' && order.status !== 'cancelled') && (
-              <div className="bg-sky-50 rounded-2xl p-4 border border-sky-100 text-sm text-sky-700 text-center">
-                📞 Questions about your order? Call us at <strong>0912-345-6789</strong>
+              <div className="clay-inset rounded-3xl p-4 text-clay-skydeep text-sm text-center">
+                <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> Questions about your order? Call us at <strong>0912-345-6789</strong>
               </div>
             )}
 
             <div className="flex flex-col gap-3">
-              <Link href="/order" className="block text-center bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-full transition-colors">
-                Place Another Order
-              </Link>
-              <Link href="/" className="block text-center border border-sky-300 text-sky-600 font-semibold py-3 rounded-full hover:bg-sky-50 transition-colors">
-                Back to Home
-              </Link>
+              <ClayButton href="/order" className="w-full">Place Another Order</ClayButton>
+              <ClayButton href="/" variant="outline" className="w-full">Back to Home</ClayButton>
             </div>
           </>
         )}
