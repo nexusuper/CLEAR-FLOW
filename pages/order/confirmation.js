@@ -23,13 +23,13 @@ export default function Confirmation() {
 
   useEffect(() => {
     if (!id) return;
+    trackedRef.current = false;
     fetch(`/api/orders/${id}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setError(d.error);
         else {
           setOrder(d);
-          // Track purchase event once
           if (!trackedRef.current && d.total_amount) {
             trackPurchase(d.total_amount, 'PHP');
             trackedRef.current = true;
