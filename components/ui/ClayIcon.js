@@ -20,6 +20,7 @@ const PATHS = {
   chat: <path d="M4 5h16v11H9l-5 4z" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+  menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   cancel: <><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>,
 };
 
