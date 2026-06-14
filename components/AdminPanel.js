@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import Head from 'next/head';
+import ClayIcon from './ui/ClayIcon';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
 const DELETABLE_STATUSES = ['delivered', 'cancelled'];
@@ -85,11 +86,11 @@ function LoginScreen({ onLogin }) {
   return (
     <>
       <Head><title>Admin — Clear Flow</title></Head>
-      <div className="min-h-screen bg-sky-50 flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl shadow-md p-8 w-full max-w-sm">
+      <div className="min-h-screen bg-clay-bg flex items-center justify-center px-4">
+        <div className="clay-raised rounded-3xl p-8 w-full max-w-sm">
           <div className="text-center mb-6">
-            <div className="text-4xl mb-2">🔒</div>
-            <h1 className="text-2xl font-bold text-sky-800">Admin Panel</h1>
+            <ClayIcon name="lock" className="w-10 h-10 mx-auto mb-2 text-clay-sky" />
+            <h1 className="text-2xl font-bold text-clay-ink font-display">Admin Panel</h1>
             <p className="text-gray-400 text-sm">Clear Flow Order Management</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -99,13 +100,13 @@ function LoginScreen({ onLogin }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter admin password"
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300"
+              className="clay-input"
             />
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-full transition-colors"
+              className="w-full clay-btn-primary clay-pressable rounded-full py-3 font-display font-semibold"
             >
               {loading ? 'Logging in...' : 'Login'}
             </button>
@@ -234,17 +235,17 @@ export default function AdminPanel() {
   return (
     <>
       <Head><title>Admin — Clear Flow</title></Head>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-clay-bg">
 
         {/* Header */}
-        <div className="bg-sky-600 text-white px-6 py-4 flex items-center justify-between">
+        <div className="text-white px-6 py-4 flex items-center justify-between" style={{ background: 'linear-gradient(160deg,#38bdf8,#0284c7)' }}>
           <div>
             <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
             <p className="text-sky-200 text-sm">{orders.length} total orders</p>
           </div>
           <div className="flex gap-3">
             <button onClick={fetchOrders} className="bg-sky-500 hover:bg-sky-400 px-4 py-2 rounded-full text-sm font-medium transition-colors">
-              ↻ Refresh
+              <ClayIcon name="refresh" className="w-4 h-4 inline" /> Refresh
             </button>
             <button
               onClick={() => { setAuthed(false); setOrders([]); setSavedPassword(''); }}
@@ -263,7 +264,7 @@ export default function AdminPanel() {
               <button
                 key={s.value}
                 onClick={() => setFilter(filter === s.value ? 'all' : s.value)}
-                className={'rounded-xl p-3 text-center border-2 transition-colors ' + (filter === s.value ? 'border-sky-500 bg-sky-50' : 'bg-white border-transparent')}
+                className={'rounded-2xl p-3 text-center clay-raised-sm ' + (filter === s.value ? 'clay-tile-selected' : '')}
               >
                 <div className="text-2xl font-bold text-sky-700">{orders.filter((o) => o.status === s.value).length}</div>
                 <div className="text-xs text-gray-500">{s.label}</div>
@@ -278,12 +279,12 @@ export default function AdminPanel() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, phone, or order ID..."
-              className="flex-1 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-sky-300 bg-white"
+              className="clay-input flex-1"
             />
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="border border-gray-200 rounded-lg px-4 py-2 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-sky-300"
+              className="clay-input"
             >
               {SORT_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
@@ -292,12 +293,12 @@ export default function AdminPanel() {
           {/* Notify Modal */}
           {notifyModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-              <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full">
-                <h2 className="text-lg font-bold text-sky-800 mb-1">📋 Send Notification</h2>
+              <div className="clay-raised rounded-3xl p-6 max-w-md w-full">
+                <h2 className="text-lg font-bold text-sky-800 mb-1"><ClayIcon name="clipboard" className="w-5 h-5 inline mr-1" /> Send Notification</h2>
                 <p className="text-sm text-gray-500 mb-3">
                   Copy and send to <strong>{notifyModal.phone}</strong> via SMS, Viber, or Messenger:
                 </p>
-                <div className="bg-sky-50 rounded-xl p-4 text-sm text-gray-700 mb-4 border border-sky-100 leading-relaxed">
+                <div className="clay-inset rounded-xl p-4 text-sm text-gray-700 mb-4 leading-relaxed">
                   {notifyModal.message}
                 </div>
                 <div className="flex gap-2">
@@ -314,14 +315,14 @@ export default function AdminPanel() {
 
           {/* Messenger Result Toast */}
           {messengerResult && (
-            <div className="fixed bottom-4 right-4 z-50 animate-pulse">
+            <div className="fixed bottom-4 right-4 z-50">
               <div className={`rounded-xl shadow-lg p-4 max-w-sm ${messengerResult.success ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
                 <div className="flex items-center gap-2">
-                  <span>{messengerResult.success ? '✅' : '❌'}</span>
+                  <span>{messengerResult.success ? <ClayIcon name="check" className="w-4 h-4" /> : <ClayIcon name="cancel" className="w-4 h-4" />}</span>
                   <span className="font-medium">
                     {messengerResult.success ? 'Messenger notification sent!' : messengerResult.message || messengerResult.error}
                   </span>
-                  <button onClick={() => setMessengerResult(null)} className="ml-2 hover:opacity-70">✕</button>
+                  <button onClick={() => setMessengerResult(null)} className="ml-2 hover:opacity-70"><ClayIcon name="close" className="w-4 h-4" /></button>
                 </div>
               </div>
             </div>
@@ -330,8 +331,8 @@ export default function AdminPanel() {
           {/* Bulk Delete Modal */}
           {bulkDeleteModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-              <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
-                <div className="text-3xl text-center mb-3">🗑️</div>
+              <div className="clay-raised rounded-3xl p-6 max-w-sm w-full">
+                <ClayIcon name="trash" className="w-8 h-8 mx-auto mb-3 text-red-500" />
                 <h2 className="text-lg font-bold text-gray-800 text-center mb-2">Delete {selected.length} orders?</h2>
                 <p className="text-sm text-gray-500 text-center mb-2">All selected delivered & cancelled orders will be permanently removed.</p>
                 <p className="text-xs text-red-400 text-center mb-5">This cannot be undone.</p>
@@ -348,8 +349,8 @@ export default function AdminPanel() {
           {/* Single Delete Modal */}
           {deleteModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-              <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
-                <div className="text-3xl text-center mb-3">🗑️</div>
+              <div className="clay-raised rounded-3xl p-6 max-w-sm w-full">
+                <ClayIcon name="trash" className="w-8 h-8 mx-auto mb-3 text-red-500" />
                 <h2 className="text-lg font-bold text-gray-800 text-center mb-1">Delete Order?</h2>
                 <p className="text-sm text-gray-500 text-center mb-1">Order <span className="font-mono font-bold text-sky-600">{deleteModal.id}</span></p>
                 <p className="text-sm text-gray-500 text-center mb-4">{deleteModal.customer_name} — ₱{deleteModal.total_amount}</p>
@@ -365,7 +366,7 @@ export default function AdminPanel() {
           )}
 
           {/* Orders Table */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="clay-raised rounded-3xl overflow-hidden">
             {filtered.length === 0 ? (
               <div className="text-center py-12 text-gray-400">No orders found</div>
             ) : (
@@ -374,7 +375,7 @@ export default function AdminPanel() {
                   <span className="text-xs text-gray-400">Showing {filtered.length} of {orders.length} orders</span>
                   {selected.length > 0 && (
                     <button onClick={() => setBulkDeleteModal(true)} className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1 rounded-full transition-colors">
-                      🗑️ Delete {selected.length} selected
+                      <ClayIcon name="trash" className="w-3.5 h-3.5 inline" /> Delete {selected.length} selected
                     </button>
                   )}
                 </div>
@@ -410,7 +411,7 @@ export default function AdminPanel() {
                           <td className="px-4 py-3">
                             <div className="font-medium text-gray-800 flex items-center gap-1">
                               {o.customer_name}
-                              {o.messenger_psid && <span title="Messenger linked" className="text-blue-500">💬</span>}
+                              {o.messenger_psid && <ClayIcon name="chat" title="Messenger linked" className="w-4 h-4 inline text-blue-500" />}
                             </div>
                             <div className="text-gray-400 text-xs">{o.phone}</div>
                           </td>
@@ -445,18 +446,18 @@ export default function AdminPanel() {
                               {NOTIFIABLE_STATUSES.includes(o.status) && (
                                 <>
                                   <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
-                                    {notifying === o.id ? '...' : '📱'}
+                                    {notifying === o.id ? '...' : <ClayIcon name="mobile" className="w-4 h-4" />}
                                   </button>
                                   {o.messenger_psid && (
                                     <button onClick={() => notifyViaMessenger(o.id, o.status)} disabled={messengerNotifying === o.id} title="Send via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
-                                      {messengerNotifying === o.id ? '...' : '💬'}
+                                      {messengerNotifying === o.id ? '...' : <ClayIcon name="chat" className="w-4 h-4" />}
                                     </button>
                                   )}
                                 </>
                               )}
                               {DELETABLE_STATUSES.includes(o.status) && (
                                 <button onClick={() => setDeleteModal(o)} title="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
-                                  🗑️
+                                  <ClayIcon name="trash" className="w-4 h-4" />
                                 </button>
                               )}
                             </div>

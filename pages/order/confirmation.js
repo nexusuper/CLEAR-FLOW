@@ -3,6 +3,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState, useRef } from 'react';
 import { trackPurchase } from '@/pages/_app';
+import ClayCard from '@/components/ui/ClayCard';
+import ClayButton from '@/components/ui/ClayButton';
+import ClayIcon from '@/components/ui/ClayIcon';
 
 const STATUS_LABELS = {
   pending: { label: 'Pending', color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
@@ -44,10 +47,12 @@ export default function Confirmation() {
 
   return (
     <Layout title="Order Confirmed — Clear Flow">
-      <section className="bg-gradient-to-r from-sky-500 to-sky-400 text-white py-10 text-center">
-        <div className="text-5xl mb-2">✅</div>
-        <h1 className="text-3xl font-extrabold">Order Placed!</h1>
-        <p className="text-sky-100 mt-1">We received your order and will process it shortly.</p>
+      <section className="px-4 pt-8">
+        <ClayCard className="max-w-lg mx-auto py-10 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
+          <ClayIcon name="check" className="w-12 h-12 mx-auto mb-2" />
+          <h1 className="text-3xl font-extrabold">Order Placed!</h1>
+          <p className="text-sky-50 font-semibold mt-1">We received your order and will process it shortly.</p>
+        </ClayCard>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10">
@@ -56,14 +61,14 @@ export default function Confirmation() {
 
         {order && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-sky-100 text-center">
-              <p className="text-sm text-gray-500 mb-1">Your Order ID</p>
+            <ClayCard className="p-6 text-center">
+              <p className="text-sm text-clay-muted mb-1">Your Order ID</p>
               <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{order.id}</p>
-              <p className="text-xs text-gray-400 mt-1">Save this to track your order</p>
-            </div>
+              <p className="text-xs text-clay-muted mt-1">Save this to track your order</p>
+            </ClayCard>
 
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-sky-100">
-              <h2 className="font-bold text-sky-800 mb-3">Order Details</h2>
+            <ClayCard className="p-6">
+              <h2 className="font-display font-semibold text-clay-ink2 mb-3">Order Details</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Status</span>
@@ -98,23 +103,17 @@ export default function Confirmation() {
                   <span className="text-sky-600 font-bold">₱{order.total_amount}</span>
                 </div>
               </div>
-            </div>
+            </ClayCard>
 
-            <div className="bg-sky-50 rounded-2xl p-5 border border-sky-100 text-center text-sm text-sky-700">
-              📞 We will call you at <strong>{order.phone}</strong> before delivery.
+            <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep">
+              <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.
               <br />Expected: <strong>within 2–4 hours</strong> (or same day if ordered before 2PM).
-            </div>
+            </ClayCard>
 
             <div className="flex flex-col gap-3">
-              <Link href={`/track?id=${order.id}`} className="block text-center bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-full transition-colors">
-                🔍 Track My Order
-              </Link>
-              <Link href="/order" className="block text-center border border-sky-300 text-sky-600 font-semibold py-3 rounded-full hover:bg-sky-50 transition-colors">
-                Place Another Order
-              </Link>
-              <Link href="/" className="block text-center text-gray-400 hover:text-gray-600 py-2 transition-colors text-sm">
-                Back to Home
-              </Link>
+              <ClayButton href={`/track?id=${order.id}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
+              <ClayButton href="/order" variant="outline" className="w-full">Place Another Order</ClayButton>
+              <Link href="/" className="block text-center text-clay-muted hover:text-clay-ink2 py-2 transition-colors text-sm">Back to Home</Link>
             </div>
           </div>
         )}

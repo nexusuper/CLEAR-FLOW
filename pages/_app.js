@@ -2,10 +2,26 @@ import "@/styles/globals.css";
 import Script from 'next/script';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
+import MessengerButton from '@/components/MessengerButton';
+import { Fredoka, Nunito } from 'next/font/google';
+
+const fredoka = Fredoka({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-fredoka',
+  display: 'swap',
+});
+const nunito = Nunito({
+  subsets: ['latin'],
+  weight: ['400', '600', '700', '800'],
+  variable: '--font-nunito',
+  display: 'swap',
+});
 
 // Facebook Pixel helper
 export const FB_PIXEL_ID = process.env.NEXT_PUBLIC_FB_PIXEL_ID;
-export const FB_PAGE_ID = process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166';
+// Sanitize to digits only — prevents script injection if env var is ever misset
+export const FB_PAGE_ID = (process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166').replace(/[^0-9]/g, '');
 
 export const pageview = () => {
   if (typeof window !== 'undefined' && window.fbq) {
@@ -37,7 +53,7 @@ export default function App({ Component, pageProps }) {
 
 
   return (
-    <>
+    <div className={`${fredoka.variable} ${nunito.variable}`}>
       {/* Meta Pixel */}
       {FB_PIXEL_ID && (
         <Script
@@ -51,38 +67,13 @@ export default function App({ Component, pageProps }) {
         />
       )}
 
-      {/* Facebook Messenger Chat Plugin */}
-      {FB_PAGE_ID && (
-        <>
-          <div id="fb-root"></div>
-          <div id="fb-customer-chat" className="fb-customerchat"></div>
-          <Script
-            id="fb-sdk"
-            strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                var chatbox = document.getElementById('fb-customer-chat');
-                if (chatbox) {
-                  chatbox.setAttribute('page_id', '${FB_PAGE_ID}');
-                  chatbox.setAttribute('attribution', 'biz_inbox');
-                }
-                window.fbAsyncInit = function() {
-                  FB.init({ xfbml: true, version: 'v18.0' });
-                };
-                (function(d, s, id) {
-                  var js, fjs = d.getElementsByTagName(s)[0];
-                  if (d.getElementById(id)) return;
-                  js = d.createElement(s); js.id = id;
-                  js.src = 'https://connect.facebook.net/en_US/sdk/xfbml.customerchat.js';
-                  fjs.parentNode.insertBefore(js, fjs);
-                }(document, 'script', 'facebook-jssdk'));
-              `,
-            }}
-          />
-        </>
-      )}
+      {/* Floating Messenger button.
+          Meta shut down the Customer Chat Plugin (the fb-customerchat SDK widget)
+          on May 9, 2024, so the old SDK approach can never render. m.me deep links
+          are Meta's sanctioned replacement. */}
+      <MessengerButton />
 
       <Component {...pageProps} />
-    </>
+    </div>
   );
 }

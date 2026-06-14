@@ -10,7 +10,7 @@ export default function Layout({ children, title = 'Clear Flow — Pure Water De
         <meta name="description" content="Order fresh purified water refills delivered to your door. No login required." />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      <div className="min-h-screen flex flex-col bg-sky-50">
+      <div className="min-h-screen flex flex-col bg-clay-bg">
         <Navbar />
         <main className="flex-1">{children}</main>
         <Footer />

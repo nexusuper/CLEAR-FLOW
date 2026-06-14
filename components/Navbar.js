@@ -1,46 +1,44 @@
 import Link from 'next/link';
 import { useState } from 'react';
+import ClayIcon from './ui/ClayIcon';
+
+const LINKS = [
+  { href: '/', label: 'Home' },
+  { href: '/products', label: 'Products' },
+  { href: '/track', label: 'Track Order' },
+];
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
-
   return (
-    <nav className="bg-white shadow-sm border-b border-sky-100">
-      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-sky-500 rounded-full flex items-center justify-center">
-            <span className="text-white text-lg">💧</span>
-          </div>
-          <span className="text-xl font-bold text-sky-600">Clear Flow</span>
+    <nav className="sticky top-0 z-40 px-4 pt-4">
+      <div className="max-w-6xl mx-auto flex items-center justify-between rounded-3xl px-5 py-3 clay-raised">
+        <Link href="/" className="flex items-center gap-2.5">
+          <span className="grid place-items-center w-9 h-9 rounded-[13px] text-white clay-raised-sm"
+                style={{ background: 'linear-gradient(145deg,#7dd3fc,#0ea5e9)' }}>
+            <ClayIcon name="drop" className="w-5 h-5" fill="#fff" stroke="none" />
+          </span>
+          <span className="font-display text-xl font-bold text-clay-ink2">Clear Flow</span>
         </Link>
 
-        {/* Desktop */}
         <div className="hidden md:flex items-center gap-6">
-          <Link href="/" className="text-gray-600 hover:text-sky-600 transition-colors">Home</Link>
-          <Link href="/products" className="text-gray-600 hover:text-sky-600 transition-colors">Products</Link>
-          <Link href="/track" className="text-gray-600 hover:text-sky-600 transition-colors">Track Order</Link>
-          <Link href="/order" className="bg-sky-500 hover:bg-sky-600 text-white px-5 py-2 rounded-full font-medium transition-colors">
-            Order Now
-          </Link>
+          {LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className="font-semibold text-clay-muted hover:text-clay-skydeep transition-colors">{l.label}</Link>
+          ))}
+          <Link href="/order" className="rounded-full px-5 py-2 font-display font-semibold text-white clay-btn-primary clay-pressable">Order Now</Link>
         </div>
 
-        {/* Mobile hamburger */}
-        <button className="md:hidden text-gray-600" onClick={() => setOpen(!open)}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {open
-              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            }
-          </svg>
+        <button className="md:hidden text-clay-ink2" onClick={() => setOpen(!open)} aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open}>
+          <ClayIcon name={open ? 'close' : 'menu'} className="w-7 h-7" />
         </button>
       </div>
 
       {open && (
-        <div className="md:hidden bg-white border-t border-sky-100 px-4 pb-4 flex flex-col gap-3">
-          <Link href="/" className="text-gray-600 hover:text-sky-600 py-2" onClick={() => setOpen(false)}>Home</Link>
-          <Link href="/products" className="text-gray-600 hover:text-sky-600 py-2" onClick={() => setOpen(false)}>Products</Link>
-          <Link href="/track" className="text-gray-600 hover:text-sky-600 py-2" onClick={() => setOpen(false)}>Track Order</Link>
-          <Link href="/order" className="bg-sky-500 text-white px-5 py-2 rounded-full text-center font-medium" onClick={() => setOpen(false)}>Order Now</Link>
+        <div className="md:hidden max-w-6xl mx-auto mt-2 rounded-3xl p-4 flex flex-col gap-2 clay-raised">
+          {LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className="py-2 font-semibold text-clay-muted hover:text-clay-skydeep" onClick={() => setOpen(false)}>{l.label}</Link>
+          ))}
+          <Link href="/order" className="text-center rounded-full px-5 py-2.5 font-display font-semibold text-white clay-btn-primary" onClick={() => setOpen(false)}>Order Now</Link>
         </div>
       )}
     </nav>
