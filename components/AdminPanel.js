@@ -131,6 +131,8 @@ export default function AdminPanel() {
   const [messengerResult, setMessengerResult] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [applyRewardModal, setApplyRewardModal] = useState(null);
+  const [applyingReward, setApplyingReward] = useState(null);
   const [selected, setSelected] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
@@ -194,6 +196,17 @@ export default function AdminPanel() {
     await fetchOrders();
     setDeleting(null);
     setDeleteModal(null);
+  }
+
+  async function applyReward(id) {
+    setApplyingReward(id);
+    await fetch('/api/orders/' + id + '/apply-reward', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', password: savedPassword },
+    });
+    await fetchOrders();
+    setApplyingReward(null);
+    setApplyRewardModal(null);
   }
 
   async function bulkDelete() {
@@ -365,6 +378,23 @@ export default function AdminPanel() {
             </div>
           )}
 
+          {applyRewardModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+              <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
+                <h2 className="text-lg font-bold text-gray-800 text-center mb-1">Apply free refill reward?</h2>
+                <p className="text-sm text-gray-500 text-center mb-1">Order <span className="font-mono font-bold text-sky-600">{applyRewardModal.id}</span></p>
+                <p className="text-sm text-gray-500 text-center mb-4">{applyRewardModal.customer_name} requested {applyRewardModal.reward_requested} free refill(s) (−₱{applyRewardModal.reward_requested * 30}).</p>
+                <p className="text-xs text-gray-400 text-center mb-5">Only apply after confirming this is the real customer.</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setApplyRewardModal(null)} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors">Cancel</button>
+                  <button onClick={() => applyReward(applyRewardModal.id)} disabled={applyingReward === applyRewardModal.id} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50">
+                    {applyingReward === applyRewardModal.id ? 'Applying...' : 'Apply'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Orders Table */}
           <div className="clay-raised rounded-3xl overflow-hidden">
             {filtered.length === 0 ? (
@@ -432,6 +462,9 @@ export default function AdminPanel() {
                             {o.voucher_discount > 0 && (
                               <div className="text-[10px] font-semibold text-emerald-600">−₱{o.voucher_discount} reward</div>
                             )}
+                            {o.reward_requested > 0 && (
+                              <div className="text-[10px] font-semibold text-amber-600">wants {o.reward_requested} free refill{o.reward_requested > 1 ? 's' : ''}</div>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                             {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -463,6 +496,11 @@ export default function AdminPanel() {
                               {DELETABLE_STATUSES.includes(o.status) && (
                                 <button onClick={() => setDeleteModal(o)} title="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
                                   <ClayIcon name="trash" className="w-4 h-4" />
+                                </button>
+                              )}
+                              {o.reward_requested > 0 && (
+                                <button onClick={() => setApplyRewardModal(o)} title="Apply free refill reward" className="text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                                  Apply reward
                                 </button>
                               )}
                             </div>

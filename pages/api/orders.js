@@ -1,6 +1,7 @@
 import { initDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
+import { hashCode } from '@/lib/reward-codes';
 
 export default async function handler(req, res) {
   let sql;
@@ -29,33 +30,57 @@ export default async function handler(req, res) {
       product_type, container_size, quantity,
       need_container, container_quantity,
       payment_method, gcash_number, reference_number,
-      notes, total_amount, voucher_count, voucher_discount,
+      notes, total_amount, reward_requested, reward_code,
     } = req.body;
 
     if (!customer_name || !phone || !address || !barangay || !product_type || !container_size || !quantity || !payment_method) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Authoritative voucher validation: recompute what this phone has actually
-    // earned from delivered orders; never trust the client's claimed count.
+    // Loyalty redemption: never trust the client. A discount is applied only when
+    // a valid Messenger code is consumed; otherwise the request is stored as
+    // pending for admin approval. `available` re-clamp caps redemption to earned.
     const normPhone = normalizePhone(phone);
-    let allowedVouchers = 0;
+    let available = 0;
     try {
       const prior = await sql`
         SELECT status, container_size, quantity, voucher_count
         FROM orders
         WHERE regexp_replace(phone, '\\D', '', 'g') = ${normPhone}
       `;
-      const { available } = computeRewards(prior);
-      const requested = Math.max(0, parseInt(voucher_count) || 0);
-      allowedVouchers = Math.max(0, Math.min(requested, available, parseInt(quantity) || 0));
+      available = computeRewards(prior).available;
     } catch (e) {
-      allowedVouchers = 0; // if lookup fails, redeem nothing rather than over-credit
+      available = 0;
     }
-    const allowedDiscount = allowedVouchers * VOUCHER_VALUE;
-    const claimedDiscount = Math.max(0, Number(voucher_discount) || 0);
-    // Correct the client total for any disallowed discount, never below 0.
-    const finalTotal = Math.max(0, (Number(total_amount) || 0) + (claimedDiscount - allowedDiscount));
+    const requested = Math.max(0, Math.min(parseInt(reward_requested) || 0, parseInt(quantity) || 0));
+
+    let voucher_count = 0;
+    let reward_requested_store = 0;
+    if (requested > 0 && reward_code) {
+      try {
+        const codeRows = await sql`
+          SELECT id, code_hash, expires_at, used FROM reward_codes
+          WHERE phone = ${normPhone} AND used = 0
+          ORDER BY created_at DESC LIMIT 5
+        `;
+        const nowIso = new Date().toISOString();
+        const match = codeRows.find(
+          (r) => r.expires_at > nowIso && r.code_hash === hashCode(normPhone, String(reward_code))
+        );
+        if (match) {
+          await sql`UPDATE reward_codes SET used = 1 WHERE id = ${match.id}`;
+          voucher_count = Math.min(requested, available);
+        } else {
+          reward_requested_store = requested; // invalid/expired code → pending
+        }
+      } catch (e) {
+        reward_requested_store = requested;
+      }
+    } else if (requested > 0) {
+      reward_requested_store = requested; // no code → pending admin approval
+    }
+    const voucher_discount = voucher_count * VOUCHER_VALUE;
+    const finalTotal = Math.max(0, (Number(total_amount) || 0) - voucher_discount);
 
     const id = uuidv4().slice(0, 8).toUpperCase();
     const created_at = new Date().toISOString();
@@ -73,14 +98,14 @@ export default async function handler(req, res) {
           need_container, container_quantity,
           payment_method, gcash_number, reference_number,
           notes, total_amount, created_at,
-          voucher_count, voucher_discount
+          voucher_count, voucher_discount, reward_requested
         ) VALUES (
           ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
           ${product_type}, ${container_size}, ${quantity},
           ${nc}, ${cq},
           ${payment_method}, ${gn}, ${rn},
           ${nt}, ${finalTotal}, ${created_at},
-          ${allowedVouchers}, ${allowedDiscount}
+          ${voucher_count}, ${voucher_discount}, ${reward_requested_store}
         )
       `;
     } catch (err) {
