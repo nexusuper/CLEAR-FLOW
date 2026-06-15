@@ -79,7 +79,7 @@ export default function Rewards() {
 
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep font-semibold">
               <ClayIcon name="info" className="w-4 h-4 inline mr-1" />
-              Your free refills (₱{VOUCHER_VALUE} each) apply automatically at checkout.
+              Use your free refills (₱{VOUCHER_VALUE} each) at checkout — verify with a Messenger code, or we&apos;ll apply them when we confirm your delivery.
             </ClayCard>
 
             <ClayButton href="/order" className="w-full">Order &amp; Redeem</ClayButton>
