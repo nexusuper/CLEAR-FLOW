@@ -111,6 +111,12 @@ export default function Confirmation() {
                 You saved ₱{order.voucher_discount} with a free-refill reward!
               </ClayCard>
             )}
+            {order.reward_requested > 0 && (
+              <ClayCard variant="inset" className="p-4 text-center text-sm font-semibold text-clay-ink2">
+                <ClayIcon name="info" className="w-4 h-4 inline mr-1" />
+                Free refill requested ×{order.reward_requested} — we&apos;ll apply it when we confirm your delivery.
+              </ClayCard>
+            )}
             <p className="text-center text-xs text-clay-muted">
               Earning free refills with every order — <Link href="/rewards" className="text-clay-skydeep font-semibold hover:underline">check your rewards</Link>.
             </p>
