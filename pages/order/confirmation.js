@@ -105,6 +105,16 @@ export default function Confirmation() {
               </div>
             </ClayCard>
 
+            {order.voucher_discount > 0 && (
+              <ClayCard variant="inset" className="p-4 text-center text-sm font-semibold text-clay-skydeep">
+                <ClayIcon name="party" className="w-4 h-4 inline mr-1" />
+                You saved ₱{order.voucher_discount} with a free-refill reward!
+              </ClayCard>
+            )}
+            <p className="text-center text-xs text-clay-muted">
+              Earning free refills with every order — <Link href="/rewards" className="text-clay-skydeep font-semibold hover:underline">check your rewards</Link>.
+            </p>
+
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep">
               <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.
               <br />Expected: <strong>within 2–4 hours</strong> (or same day if ordered before 2PM).
