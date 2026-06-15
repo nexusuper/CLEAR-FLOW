@@ -5,6 +5,7 @@ import ClayIcon from './ui/ClayIcon';
 const LINKS = [
   { href: '/', label: 'Home' },
   { href: '/products', label: 'Products' },
+  { href: '/rewards', label: 'Rewards' },
   { href: '/track', label: 'Track Order' },
 ];
 

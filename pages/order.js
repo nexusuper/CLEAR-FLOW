@@ -2,6 +2,8 @@ import Layout from '@/components/Layout';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
+import ClayIcon from '@/components/ui/ClayIcon';
+import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 
 const PRODUCTS = [
   { id: 'slim5', name: '5-Gallon Slim', refill: 30, container: 150, size: '5-Gal' },
@@ -35,18 +37,50 @@ export default function Order() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rewards, setRewards] = useState(null);   // { available, deliveredGallons, gallonsToNext, ... }
+  const [applyVouchers, setApplyVouchers] = useState(0);
 
   useEffect(() => {
     if (queryProduct) setForm((f) => ({ ...f, product_type: queryProduct }));
   }, [queryProduct]);
 
+  // Look up loyalty rewards when the phone number looks complete.
+  useEffect(() => {
+    const digits = normalizePhone(form.phone);
+    if (digits.length < 7) {
+      setRewards(null);
+      setApplyVouchers(0);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/rewards?phone=${encodeURIComponent(digits)}`);
+        if (res.ok) setRewards(await res.json());
+        else setRewards(null);
+      } catch {
+        setRewards(null);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [form.phone]);
+
   const selectedProduct = PRODUCTS.find((p) => p.id === form.product_type) || PRODUCTS[0];
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
   const delivery = deliveryFee(form.quantity);
-  const grandTotal = refillTotal + containerTotal + delivery;
+  const maxVouchers = maxRedeemable({
+    available: rewards ? rewards.available : 0,
+    quantity: form.quantity,
+    refillSubtotal: refillTotal,
+  });
+  const voucherDiscount = applyVouchers * VOUCHER_VALUE;
+  const grandTotal = Math.max(0, refillTotal + containerTotal + delivery - voucherDiscount);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+
+  useEffect(() => {
+    setApplyVouchers((n) => Math.min(n, maxVouchers));
+  }, [maxVouchers]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -60,6 +94,8 @@ export default function Order() {
           ...form,
           container_size: selectedProduct.size,
           total_amount: grandTotal,
+          voucher_count: applyVouchers,
+          voucher_discount: voucherDiscount,
         }),
       });
       const data = await res.json();
@@ -129,6 +165,36 @@ export default function Order() {
               </div>
             </div>
           </ClayCard>
+
+          {/* Loyalty reward */}
+          {rewards && rewards.available > 0 && (
+            <ClayCard variant="inset" className="p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="grid place-items-center w-11 h-11 rounded-2xl text-white clay-raised-sm"
+                      style={{ background: 'linear-gradient(145deg,#38bdf8,#0284c7)' }}>
+                  <ClayIcon name="party" className="w-6 h-6" />
+                </span>
+                <div>
+                  <p className="font-display font-bold text-clay-ink">You have {rewards.available} free refill{rewards.available > 1 ? 's' : ''}!</p>
+                  <p className="text-xs text-clay-muted font-semibold">Each free 5-gallon refill saves you ₱{VOUCHER_VALUE}.</p>
+                </div>
+              </div>
+              {maxVouchers > 0 ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-clay-ink2">Apply to this order</span>
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => setApplyVouchers((n) => Math.max(0, n - 1))}
+                            className="w-8 h-8 rounded-full clay-raised-sm font-bold text-clay-skydeep clay-pressable" aria-label="Use fewer">−</button>
+                    <span className="font-display font-bold text-clay-ink w-6 text-center">{applyVouchers}</span>
+                    <button type="button" onClick={() => setApplyVouchers((n) => Math.min(maxVouchers, n + 1))}
+                            className="w-8 h-8 rounded-full clay-raised-sm font-bold text-clay-skydeep clay-pressable" aria-label="Use more">+</button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-clay-muted font-semibold">Add at least ₱{VOUCHER_VALUE} of refills to use a free refill on this order.</p>
+              )}
+            </ClayCard>
+          )}
 
           {/* Product Selection */}
           <ClayCard className="p-6">
@@ -284,6 +350,12 @@ export default function Order() {
                 <span className="text-gray-600">Delivery fee</span>
                 <span className="font-medium">{delivery === 0 ? 'FREE' : `₱${delivery}`}</span>
               </div>
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-clay-skydeep font-semibold">
+                  <span>Free refill reward ×{applyVouchers}</span>
+                  <span>−₱{voucherDiscount}</span>
+                </div>
+              )}
               <div className="border-t border-sky-200 pt-2 mt-2 flex justify-between font-bold text-base">
                 <span className="text-sky-900">Total</span>
                 <span className="text-sky-600">₱{grandTotal}</span>
