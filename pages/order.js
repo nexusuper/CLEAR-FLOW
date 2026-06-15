@@ -37,8 +37,18 @@ export default function Order() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [rewards, setRewards] = useState(null);   // { available, deliveredGallons, gallonsToNext, ... }
-  const [applyVouchers, setApplyVouchers] = useState(0);
+  const [rewards, setRewards] = useState(null);
+  const [rewardCount, setRewardCount] = useState(0);
+  const [codePhase, setCodePhase] = useState('idle'); // idle|sending|entry|verifying|verified|fallback
+  const [codeInput, setCodeInput] = useState('');
+  const [codeError, setCodeError] = useState('');
+
+  function resetReward() {
+    setRewardCount(0);
+    setCodePhase('idle');
+    setCodeInput('');
+    setCodeError('');
+  }
 
   useEffect(() => {
     if (queryProduct) setForm((f) => ({ ...f, product_type: queryProduct }));
@@ -49,7 +59,7 @@ export default function Order() {
     const digits = normalizePhone(form.phone);
     if (digits.length < 7) {
       setRewards(null);
-      setApplyVouchers(0);
+      resetReward();
       return;
     }
     const t = setTimeout(async () => {
@@ -68,19 +78,67 @@ export default function Order() {
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
   const delivery = deliveryFee(form.quantity);
+  const baseTotal = refillTotal + containerTotal + delivery;
   const maxVouchers = maxRedeemable({
     available: rewards ? rewards.available : 0,
     quantity: form.quantity,
     refillSubtotal: refillTotal,
   });
-  const voucherDiscount = applyVouchers * VOUCHER_VALUE;
-  const grandTotal = Math.max(0, refillTotal + containerTotal + delivery - voucherDiscount);
+  const codeApplied = codePhase === 'verified';
+  const voucherDiscount = codeApplied ? rewardCount * VOUCHER_VALUE : 0;
+  const grandTotal = Math.max(0, baseTotal - voucherDiscount);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
+  // Keep the chosen count within bounds; any bound change cancels a prior verification.
   useEffect(() => {
-    setApplyVouchers((n) => Math.min(n, maxVouchers));
+    setRewardCount((n) => Math.min(n, maxVouchers));
   }, [maxVouchers]);
+
+  function changeCount(next) {
+    setRewardCount(Math.max(0, Math.min(maxVouchers, next)));
+    setCodePhase('idle');
+    setCodeInput('');
+    setCodeError('');
+  }
+
+  async function sendCode() {
+    setCodePhase('sending');
+    setCodeError('');
+    try {
+      const res = await fetch('/api/rewards/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: form.phone }),
+      });
+      const data = await res.json();
+      setCodePhase(res.ok && data.sent ? 'entry' : 'fallback');
+    } catch {
+      setCodePhase('fallback');
+    }
+  }
+
+  async function verifyCode() {
+    setCodePhase('verifying');
+    setCodeError('');
+    try {
+      const res = await fetch('/api/rewards/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: form.phone, code: codeInput }),
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setCodePhase('verified');
+      } else {
+        setCodePhase('entry');
+        setCodeError('That code is invalid or expired.');
+      }
+    } catch {
+      setCodePhase('entry');
+      setCodeError('Could not verify. Please try again.');
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -93,9 +151,9 @@ export default function Order() {
         body: JSON.stringify({
           ...form,
           container_size: selectedProduct.size,
-          total_amount: grandTotal,
-          voucher_count: applyVouchers,
-          voucher_discount: voucherDiscount,
+          total_amount: baseTotal,
+          reward_requested: rewardCount,
+          reward_code: codeApplied ? codeInput : null,
         }),
       });
       const data = await res.json();
@@ -125,43 +183,19 @@ export default function Order() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                <input
-                  required
-                  value={form.customer_name}
-                  onChange={(e) => set('customer_name', e.target.value)}
-                  className="clay-input"
-                  placeholder="Juan Dela Cruz"
-                />
+                <input required value={form.customer_name} onChange={(e) => set('customer_name', e.target.value)} className="clay-input" placeholder="Juan Dela Cruz" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                <input
-                  required
-                  value={form.phone}
-                  onChange={(e) => set('phone', e.target.value)}
-                  className="clay-input"
-                  placeholder="09XX-XXX-XXXX"
-                />
+                <input required value={form.phone} onChange={(e) => set('phone', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Street Address *</label>
-                <input
-                  required
-                  value={form.address}
-                  onChange={(e) => set('address', e.target.value)}
-                  className="clay-input"
-                  placeholder="123 Rizal St."
-                />
+                <input required value={form.address} onChange={(e) => set('address', e.target.value)} className="clay-input" placeholder="123 Rizal St." />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Barangay *</label>
-                <input
-                  required
-                  value={form.barangay}
-                  onChange={(e) => set('barangay', e.target.value)}
-                  className="clay-input"
-                  placeholder="Brgy. San Jose"
-                />
+                <input required value={form.barangay} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" />
               </div>
             </div>
           </ClayCard>
@@ -170,8 +204,7 @@ export default function Order() {
           {rewards && rewards.available > 0 && (
             <ClayCard variant="inset" className="p-5">
               <div className="flex items-center gap-3 mb-3">
-                <span className="grid place-items-center w-11 h-11 rounded-2xl text-white clay-raised-sm"
-                      style={{ background: 'linear-gradient(145deg,#38bdf8,#0284c7)' }}>
+                <span className="grid place-items-center w-11 h-11 rounded-2xl text-white clay-raised-sm" style={{ background: 'linear-gradient(145deg,#38bdf8,#0284c7)' }}>
                   <ClayIcon name="party" className="w-6 h-6" />
                 </span>
                 <div>
@@ -179,16 +212,61 @@ export default function Order() {
                   <p className="text-xs text-clay-muted font-semibold">Each free 5-gallon refill saves you ₱{VOUCHER_VALUE}.</p>
                 </div>
               </div>
+
               {maxVouchers > 0 ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-clay-ink2">Apply to this order</span>
-                  <div className="flex items-center gap-3">
-                    <button type="button" onClick={() => setApplyVouchers((n) => Math.max(0, n - 1))}
-                            className="w-8 h-8 rounded-full clay-raised-sm font-bold text-clay-skydeep clay-pressable" aria-label="Use fewer">−</button>
-                    <span className="font-display font-bold text-clay-ink w-6 text-center">{applyVouchers}</span>
-                    <button type="button" onClick={() => setApplyVouchers((n) => Math.min(maxVouchers, n + 1))}
-                            className="w-8 h-8 rounded-full clay-raised-sm font-bold text-clay-skydeep clay-pressable" aria-label="Use more">+</button>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-clay-ink2">Free refills to use</span>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => changeCount(rewardCount - 1)} className="w-8 h-8 rounded-full clay-raised-sm font-bold text-clay-skydeep clay-pressable" aria-label="Use fewer">−</button>
+                      <span className="font-display font-bold text-clay-ink w-6 text-center">{rewardCount}</span>
+                      <button type="button" onClick={() => changeCount(rewardCount + 1)} className="w-8 h-8 rounded-full clay-raised-sm font-bold text-clay-skydeep clay-pressable" aria-label="Use more">+</button>
+                    </div>
                   </div>
+
+                  {rewardCount > 0 && (
+                    <>
+                      {codePhase === 'idle' && (
+                        <button type="button" onClick={sendCode} className="w-full clay-btn-primary clay-pressable rounded-full py-2.5 font-display font-semibold text-sm">
+                          Verify with a Messenger code
+                        </button>
+                      )}
+                      {codePhase === 'sending' && (
+                        <p className="text-xs text-clay-muted font-semibold text-center">Sending your code…</p>
+                      )}
+                      {(codePhase === 'entry' || codePhase === 'verifying') && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-clay-muted font-semibold">Enter the 6-digit code we sent to your Messenger:</p>
+                          <div className="flex gap-2">
+                            <input
+                              value={codeInput}
+                              onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              inputMode="numeric"
+                              placeholder="123456"
+                              className="clay-input flex-1 font-mono tracking-widest"
+                            />
+                            <button type="button" onClick={verifyCode} disabled={codePhase === 'verifying' || codeInput.length < 6} className="clay-btn-primary clay-pressable rounded-full px-5 font-display font-semibold text-sm disabled:opacity-60">
+                              {codePhase === 'verifying' ? '…' : 'Apply'}
+                            </button>
+                          </div>
+                          {codeError && <p className="text-red-500 text-xs">{codeError}</p>}
+                          <button type="button" onClick={() => setCodePhase('fallback')} className="text-xs text-clay-skydeep font-semibold hover:underline">
+                            Didn&apos;t get it? Apply on delivery instead
+                          </button>
+                        </div>
+                      )}
+                      {codePhase === 'verified' && (
+                        <p className="text-sm font-semibold text-clay-skydeep flex items-center gap-1">
+                          <ClayIcon name="check" className="w-4 h-4" /> Code verified — ₱{rewardCount * VOUCHER_VALUE} off applied.
+                        </p>
+                      )}
+                      {codePhase === 'fallback' && (
+                        <p className="text-xs text-clay-muted font-semibold">
+                          No problem — we&apos;ll apply your {rewardCount} free refill{rewardCount > 1 ? 's' : ''} when we confirm your delivery.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 <p className="text-xs text-clay-muted font-semibold">Add at least ₱{VOUCHER_VALUE} of refills to use a free refill on this order.</p>
@@ -204,19 +282,9 @@ export default function Order() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Product *</label>
                 <div className="grid grid-cols-1 gap-2">
                   {PRODUCTS.map((p) => (
-                    <label
-                      key={p.id}
-                      className={`flex items-center justify-between rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.product_type === p.id ? 'clay-tile-selected' : ''}`}
-                    >
+                    <label key={p.id} className={`flex items-center justify-between rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.product_type === p.id ? 'clay-tile-selected' : ''}`}>
                       <div className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name="product_type"
-                          value={p.id}
-                          checked={form.product_type === p.id}
-                          onChange={() => set('product_type', p.id)}
-                          className="accent-clay-sky"
-                        />
+                        <input type="radio" name="product_type" value={p.id} checked={form.product_type === p.id} onChange={() => set('product_type', p.id)} className="accent-clay-sky" />
                         <span className="font-semibold text-clay-ink">{p.name}</span>
                       </div>
                       <span className="font-display text-clay-skydeep font-bold">₱{p.refill}/refill</span>
@@ -227,38 +295,18 @@ export default function Order() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Quantity (refills) *</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  required
-                  value={form.quantity}
-                  onChange={(e) => set('quantity', parseInt(e.target.value) || 1)}
-                  className="clay-input"
-                />
+                <input type="number" min="1" max="50" required value={form.quantity} onChange={(e) => set('quantity', parseInt(e.target.value) || 1)} className="clay-input" />
               </div>
 
               <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.need_container}
-                  onChange={(e) => set('need_container', e.target.checked)}
-                  className="w-4 h-4 accent-sky-500"
-                />
+                <input type="checkbox" checked={form.need_container} onChange={(e) => set('need_container', e.target.checked)} className="w-4 h-4 accent-sky-500" />
                 <span className="text-sm text-gray-700">I also need a new container (+₱{selectedProduct.container} each)</span>
               </label>
 
               {form.need_container && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Number of containers *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={form.container_quantity}
-                    onChange={(e) => set('container_quantity', parseInt(e.target.value) || 1)}
-                    className="clay-input"
-                  />
+                  <input type="number" min="1" max="10" value={form.container_quantity} onChange={(e) => set('container_quantity', parseInt(e.target.value) || 1)} className="clay-input" />
                 </div>
               )}
             </div>
@@ -273,18 +321,8 @@ export default function Order() {
                 { id: 'gcash', label: 'GCash' },
                 { id: 'paymaya', label: 'PayMaya' },
               ].map((m) => (
-                <label
-                  key={m.id}
-                  className={`flex items-center gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.payment_method === m.id ? 'clay-tile-selected' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="payment_method"
-                    value={m.id}
-                    checked={form.payment_method === m.id}
-                    onChange={() => set('payment_method', m.id)}
-                    className="accent-clay-sky"
-                  />
+                <label key={m.id} className={`flex items-center gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.payment_method === m.id ? 'clay-tile-selected' : ''}`}>
+                  <input type="radio" name="payment_method" value={m.id} checked={form.payment_method === m.id} onChange={() => set('payment_method', m.id)} className="accent-clay-sky" />
                   <span className="font-semibold text-clay-ink">{m.label}</span>
                 </label>
               ))}
@@ -292,29 +330,14 @@ export default function Order() {
 
             {(form.payment_method === 'gcash' || form.payment_method === 'paymaya') && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
-                <p className="text-sm text-sky-700">
-                  Send payment to: <strong>0912-345-6789</strong> (Clear Flow)
-                </p>
+                <p className="text-sm text-sky-700">Send payment to: <strong>0912-345-6789</strong> (Clear Flow)</p>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Your {form.payment_method === 'gcash' ? 'GCash' : 'PayMaya'} Number *
-                  </label>
-                  <input
-                    required
-                    value={form.gcash_number}
-                    onChange={(e) => set('gcash_number', e.target.value)}
-                    className="clay-input"
-                    placeholder="09XX-XXX-XXXX"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Your {form.payment_method === 'gcash' ? 'GCash' : 'PayMaya'} Number *</label>
+                  <input required value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reference Number (after payment)</label>
-                  <input
-                    value={form.reference_number}
-                    onChange={(e) => set('reference_number', e.target.value)}
-                    className="clay-input"
-                    placeholder="Optional, fill after sending"
-                  />
+                  <input value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} className="clay-input" placeholder="Optional, fill after sending" />
                 </div>
               </div>
             )}
@@ -323,13 +346,7 @@ export default function Order() {
           {/* Notes */}
           <ClayCard className="p-6">
             <h2 className="text-lg font-display font-semibold text-clay-ink2 mb-4">Additional Notes</h2>
-            <textarea
-              value={form.notes}
-              onChange={(e) => set('notes', e.target.value)}
-              rows={3}
-              className="clay-input"
-              placeholder="Delivery instructions, landmarks, etc."
-            />
+            <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={3} className="clay-input" placeholder="Delivery instructions, landmarks, etc." />
           </ClayCard>
 
           {/* Order Summary */}
@@ -352,8 +369,14 @@ export default function Order() {
               </div>
               {voucherDiscount > 0 && (
                 <div className="flex justify-between text-clay-skydeep font-semibold">
-                  <span>Free refill reward ×{applyVouchers}</span>
+                  <span>Free refill reward ×{rewardCount}</span>
                   <span>−₱{voucherDiscount}</span>
+                </div>
+              )}
+              {!codeApplied && codePhase === 'fallback' && rewardCount > 0 && (
+                <div className="flex justify-between text-clay-muted">
+                  <span>Free refill requested ×{rewardCount}</span>
+                  <span>on delivery</span>
                 </div>
               )}
               <div className="border-t border-sky-200 pt-2 mt-2 flex justify-between font-bold text-base">
@@ -364,16 +387,10 @@ export default function Order() {
           </ClayCard>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
-              {error}
-            </div>
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">{error}</div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full clay-btn-primary clay-pressable rounded-full py-4 text-lg font-display font-semibold disabled:opacity-60"
-          >
+          <button type="submit" disabled={loading} className="w-full clay-btn-primary clay-pressable rounded-full py-4 text-lg font-display font-semibold disabled:opacity-60">
             {loading ? 'Placing Order...' : 'Place Order →'}
           </button>
         </form>
