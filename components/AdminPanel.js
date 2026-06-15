@@ -427,7 +427,12 @@ export default function AdminPanel() {
                             <div className="uppercase text-xs font-semibold text-gray-600">{o.payment_method}</div>
                             {o.reference_number && <div className="text-gray-400 text-xs">Ref: {o.reference_number}</div>}
                           </td>
-                          <td className="px-4 py-3 font-bold text-sky-600">₱{o.total_amount}</td>
+                          <td className="px-4 py-3 font-bold text-sky-600">
+                            ₱{o.total_amount}
+                            {o.voucher_discount > 0 && (
+                              <div className="text-[10px] font-semibold text-emerald-600">−₱{o.voucher_discount} reward</div>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                             {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </td>
