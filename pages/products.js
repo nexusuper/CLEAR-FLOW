@@ -3,18 +3,7 @@ import PurifyProcess from '@/components/PurifyProcess';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
-
-const products = [
-  { id: 'slim5', name: '5-Gallon Slim', description: 'Slim-type 5-gallon container refill. Fits most standard dispensers.', refillPrice: 30, containerPrice: 150, size: '5-Gal', tag: 'Most Popular' },
-  { id: 'round5', name: '5-Gallon Round', description: 'Round-type 5-gallon container refill. Standard round bottom dispenser.', refillPrice: 35, containerPrice: 170, size: '5-Gal', tag: 'Standard' },
-  { id: 'round3', name: '3-Gallon Round', description: 'Compact 3-gallon round container. Great for small families or offices.', refillPrice: 20, containerPrice: 100, size: '3-Gal', tag: 'Compact' },
-];
-
-const deliveryRules = [
-  { label: '1 container', fee: '₱20' },
-  { label: '2–4 containers', fee: '₱15' },
-  { label: '5+ containers', fee: 'FREE' },
-];
+import { PRODUCTS, DELIVERY_RULES } from '@/lib/products';
 
 const payments = [
   { icon: 'cash', name: 'Cash on Delivery', desc: 'Pay when your water arrives.' },
@@ -34,7 +23,7 @@ export default function Products() {
 
       <section className="max-w-6xl mx-auto px-4 py-14">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {products.map((p) => (
+          {PRODUCTS.map((p) => (
             <ClayCard key={p.id} className="p-7 flex flex-col">
               <span className="self-center text-xs font-extrabold text-white rounded-full px-4 py-1.5 mb-4 clay-btn-primary">{p.tag}</span>
               <h2 className="text-xl font-display font-semibold text-clay-ink text-center mb-1">{p.name}</h2>
@@ -42,11 +31,11 @@ export default function Products() {
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between items-center clay-inset rounded-xl px-4 py-2.5">
                   <span className="text-clay-muted text-sm font-semibold">Refill only</span>
-                  <span className="font-display text-clay-skydeep font-bold text-lg">₱{p.refillPrice}</span>
+                  <span className="font-display text-clay-skydeep font-bold text-lg">₱{p.refill}</span>
                 </div>
                 <div className="flex justify-between items-center clay-inset rounded-xl px-4 py-2.5">
                   <span className="text-clay-muted text-sm font-semibold">Container + refill</span>
-                  <span className="font-display text-clay-skydeep font-bold text-lg">₱{p.containerPrice}</span>
+                  <span className="font-display text-clay-skydeep font-bold text-lg">₱{p.container}</span>
                 </div>
               </div>
               <ClayButton href={`/order?product=${p.id}`} className="mt-auto w-full">Order Now</ClayButton>
@@ -68,10 +57,10 @@ export default function Products() {
               </tr>
             </thead>
             <tbody>
-              {deliveryRules.map((r, i) => (
+              {DELIVERY_RULES.map((r, i) => (
                 <tr key={i}>
                   <td className="px-5 py-3 text-clay-ink font-semibold">{r.label}</td>
-                  <td className="px-5 py-3 text-right font-display font-bold text-clay-skydeep">{r.fee}</td>
+                  <td className="px-5 py-3 text-right font-display font-bold text-clay-skydeep">{r.feeLabel}</td>
                 </tr>
               ))}
             </tbody>

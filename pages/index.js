@@ -5,17 +5,12 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { FB_PAGE_ID } from '@/pages/_app';
+import { PRODUCTS } from '@/lib/products';
 
 const features = [
   { icon: 'lock', title: 'No Login Required', desc: 'Order as a guest. We just need your name, address, and phone number.' },
   { icon: 'bolt', title: 'Same-Day Delivery', desc: 'Order before 2PM and get your water delivered today within your area.' },
   { icon: 'filter', title: 'Pure & Safe Water', desc: 'Multi-stage filtration and UV sterilization for the cleanest water.' },
-];
-
-const products = [
-  { name: '5-Gal Slim Refill', price: 30, tag: 'Most Popular', id: 'slim5' },
-  { name: '5-Gal Round Refill', price: 35, tag: 'Standard', id: 'round5' },
-  { name: '3-Gal Refill', price: 20, tag: 'Compact', id: 'round3' },
 ];
 
 function Jug() {
@@ -56,12 +51,12 @@ export default function Home() {
         <h2 className="text-3xl font-bold text-center text-clay-ink mb-2">Our Products</h2>
         <p className="text-center text-clay-muted font-semibold mb-10">Affordable prices, premium quality</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {products.map((p) => (
-            <ClayCard key={p.name} className="p-7 text-center">
+          {PRODUCTS.map((p) => (
+            <ClayCard key={p.id} className="p-7 text-center">
               <span className="inline-block text-xs font-extrabold text-white rounded-full px-3 py-1 mb-1 clay-btn-primary">{p.tag}</span>
               <Jug />
               <h3 className="text-lg font-display font-semibold text-clay-ink2 mt-2 mb-1">{p.name}</h3>
-              <p className="font-display text-3xl font-bold text-clay-skydeep mb-4">₱{p.price}</p>
+              <p className="font-display text-3xl font-bold text-clay-skydeep mb-4">₱{p.refill}</p>
               <ClayButton href={`/order?product=${p.id}`} className="w-full">Order This</ClayButton>
             </ClayCard>
           ))}

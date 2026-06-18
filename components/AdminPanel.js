@@ -136,18 +136,31 @@ export default function AdminPanel() {
   const [selected, setSelected] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({});
+
+  function applyPageData(data) {
+    setOrders(data.orders);
+    setTotalOrders(data.total);
+    setTotalPages(data.totalPages);
+    setPage(data.page);
+    setStatusCounts(data.statusCounts || {});
+    setSelected([]);
+  }
 
   function handleLogin(password, data) {
     setSavedPassword(password);
-    setOrders(data);
+    applyPageData(data);
     setAuthed(true);
   }
 
-  async function fetchOrders() {
-    const res = await fetch('/api/orders', { headers: { password: savedPassword } });
+  async function fetchOrders(p) {
+    const target = p || page;
+    const res = await fetch(`/api/orders?page=${target}&limit=50`, { headers: { password: savedPassword } });
     if (res.ok) {
-      setOrders(await res.json());
-      setSelected([]);
+      applyPageData(await res.json());
     }
   }
 
@@ -254,7 +267,7 @@ export default function AdminPanel() {
         <div className="text-white px-6 py-4 flex items-center justify-between" style={{ background: 'linear-gradient(160deg,#38bdf8,#0284c7)' }}>
           <div>
             <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
-            <p className="text-sky-200 text-sm">{orders.length} total orders</p>
+            <p className="text-sky-200 text-sm">{totalOrders} total orders</p>
           </div>
           <div className="flex gap-3">
             <button onClick={fetchOrders} className="bg-sky-500 hover:bg-sky-400 px-4 py-2 rounded-full text-sm font-medium transition-colors">
@@ -279,7 +292,7 @@ export default function AdminPanel() {
                 onClick={() => setFilter(filter === s.value ? 'all' : s.value)}
                 className={'rounded-2xl p-3 text-center clay-raised-sm ' + (filter === s.value ? 'clay-tile-selected' : '')}
               >
-                <div className="text-2xl font-bold text-sky-700">{orders.filter((o) => o.status === s.value).length}</div>
+                <div className="text-2xl font-bold text-sky-700">{statusCounts[s.value] || 0}</div>
                 <div className="text-xs text-gray-500">{s.label}</div>
               </button>
             ))}
@@ -402,7 +415,7 @@ export default function AdminPanel() {
             ) : (
               <>
                 <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Showing {filtered.length} of {orders.length} orders</span>
+                  <span className="text-xs text-gray-400">Showing {filtered.length} of {totalOrders} orders (page {page})</span>
                   {selected.length > 0 && (
                     <button onClick={() => setBulkDeleteModal(true)} className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1 rounded-full transition-colors">
                       <ClayIcon name="trash" className="w-3.5 h-3.5 inline" /> Delete {selected.length} selected
@@ -513,6 +526,29 @@ export default function AdminPanel() {
               </>
             )}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                onClick={() => fetchOrders(page - 1)}
+                disabled={page <= 1}
+                className="px-4 py-2 rounded-full text-sm font-semibold clay-raised-sm disabled:opacity-40 hover:bg-sky-50 transition-colors"
+              >
+                ← Prev
+              </button>
+              <span className="text-sm text-gray-500 px-3">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => fetchOrders(page + 1)}
+                disabled={page >= totalPages}
+                className="px-4 py-2 rounded-full text-sm font-semibold clay-raised-sm disabled:opacity-40 hover:bg-sky-50 transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>

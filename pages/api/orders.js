@@ -43,8 +43,25 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     try {
-      const rows = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
-      return res.status(200).json(rows);
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+      const offset = (page - 1) * limit;
+
+      const [rows, countResult, statusRows] = await Promise.all([
+        sql`SELECT * FROM orders ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+        sql`SELECT COUNT(*)::int AS total FROM orders`,
+        sql`SELECT status, COUNT(*)::int AS count FROM orders GROUP BY status`,
+      ]);
+
+      const total = countResult[0]?.total ?? 0;
+      const statusCounts = Object.fromEntries(statusRows.map((r) => [r.status, r.count]));
+      return res.status(200).json({
+        orders: rows,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+        statusCounts,
+      });
     } catch (err) {
       console.error('Order list query failed:', err);
       return res.status(500).json({ error: 'Failed to load orders' });
@@ -72,7 +89,7 @@ export default async function handler(req, res) {
       const prior = await sql`
         SELECT status, container_size, quantity, voucher_count
         FROM orders
-        WHERE regexp_replace(phone, '\\D', '', 'g') = ${normPhone}
+        WHERE phone_normalized = ${normPhone}
       `;
       available = computeRewards(prior).available;
     } catch (e) {
@@ -124,14 +141,16 @@ export default async function handler(req, res) {
           need_container, container_quantity,
           payment_method, gcash_number, reference_number,
           notes, total_amount, created_at,
-          voucher_count, voucher_discount, reward_requested
+          voucher_count, voucher_discount, reward_requested,
+          phone_normalized
         ) VALUES (
           ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
           ${product_type}, ${container_size}, ${quantity},
           ${nc}, ${cq},
           ${payment_method}, ${gn}, ${rn},
           ${nt}, ${finalTotal}, ${created_at},
-          ${voucher_count}, ${voucher_discount}, ${reward_requested_store}
+          ${voucher_count}, ${voucher_discount}, ${reward_requested_store},
+          ${normPhone}
         )
       `;
     } catch (err) {

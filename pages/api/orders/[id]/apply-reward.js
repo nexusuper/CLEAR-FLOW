@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     const prior = await sql`
       SELECT status, container_size, quantity, voucher_count
       FROM orders
-      WHERE regexp_replace(phone, '\\D', '', 'g') = ${normPhone}
+      WHERE phone_normalized = ${normPhone}
     `;
     const { available } = computeRewards(prior);
     const allowed = Math.max(0, Math.min(order.reward_requested, available, order.quantity));

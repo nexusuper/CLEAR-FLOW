@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     const rows = await sql`
       SELECT status, container_size, quantity, voucher_count
       FROM orders
-      WHERE regexp_replace(phone, '\\D', '', 'g') = ${phone}
+      WHERE phone_normalized = ${phone}
     `;
     return res.status(200).json(computeRewards(rows));
   } catch (err) {

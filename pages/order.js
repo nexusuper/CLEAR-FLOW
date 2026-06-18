@@ -4,18 +4,7 @@ import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
-
-const PRODUCTS = [
-  { id: 'slim5', name: '5-Gallon Slim', refill: 30, container: 150, size: '5-Gal' },
-  { id: 'round5', name: '5-Gallon Round', refill: 35, container: 170, size: '5-Gal' },
-  { id: 'round3', name: '3-Gallon Round', refill: 20, container: 100, size: '3-Gal' },
-];
-
-function deliveryFee(qty) {
-  if (qty >= 5) return 0;
-  if (qty >= 2) return 15;
-  return 20;
-}
+import { PRODUCTS, deliveryFee } from '@/lib/products';
 
 export default function Order() {
   const router = useRouter();
