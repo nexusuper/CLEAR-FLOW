@@ -1,6 +1,7 @@
-// Send order notification via Facebook Messenger
 import { initDb } from '@/lib/db';
 import { sendMessengerMessage } from '@/lib/facebook';
+import { verifyAdmin } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
 
 const MESSAGES = {
   confirmed: (name, id) =>
@@ -13,14 +14,14 @@ const MESSAGES = {
     `❌ Hi ${name}, your Clear Flow water order (#${id}) has been cancelled.\n\nIf you have questions, please reply to this message or call us at 0912-345-6789.`,
 };
 
+const checkRate = rateLimit({ windowMs: 60_000, max: 20 });
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  // Auth check
-  const { password } = req.headers;
-  if (password !== process.env.ADMIN_PASSWORD) {
+  if (!checkRate(req, res)) return;
+  if (!verifyAdmin(req)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -42,26 +43,22 @@ export default async function handler(req, res) {
     }
 
     if (!order.messenger_psid) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'No Messenger linked',
         message: 'Customer has not linked their Messenger account. Use SMS instead.',
       });
     }
 
     const messageText = MESSAGES[status](order.customer_name, order.id);
-    
     await sendMessengerMessage(order.messenger_psid, messageText);
 
-    return res.status(200).json({ 
-      success: true, 
+    return res.status(200).json({
+      success: true,
       message: 'Notification sent via Messenger',
     });
 
   } catch (error) {
     console.error('Messenger notify error:', error);
-    return res.status(500).json({ 
-      error: 'Failed to send notification',
-      message: error.message,
-    });
+    return res.status(500).json({ error: 'Failed to send notification' });
   }
 }

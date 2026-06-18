@@ -2,44 +2,70 @@ import { initDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
 import { hashCode } from '@/lib/reward-codes';
+import { verifyAdmin } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
+import { z } from 'zod';
+
+const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
+const orderRate = rateLimit({ windowMs: 60_000, max: 10 });
+
+const OrderSchema = z.object({
+  customer_name: z.string().min(1).max(200),
+  phone: z.string().min(7).max(20),
+  address: z.string().min(1).max(500),
+  barangay: z.string().min(1).max(200),
+  product_type: z.string().min(1).max(50),
+  container_size: z.string().min(1).max(20),
+  quantity: z.coerce.number().int().min(1).max(50),
+  need_container: z.boolean().or(z.literal(0)).or(z.literal(1)).optional().default(false),
+  container_quantity: z.coerce.number().int().min(0).max(50).optional().default(0),
+  payment_method: z.enum(['cod', 'gcash', 'paymaya']),
+  gcash_number: z.string().max(20).optional().nullable(),
+  reference_number: z.string().max(100).optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+  total_amount: z.coerce.number().min(0),
+  reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
+  reward_code: z.string().max(10).optional().nullable(),
+});
 
 export default async function handler(req, res) {
   let sql;
   try {
     sql = await initDb();
   } catch (err) {
-    return res.status(500).json({ error: `DB init failed: ${err.message}` });
+    console.error('DB init failed:', err);
+    return res.status(500).json({ error: 'Service temporarily unavailable' });
   }
 
   if (req.method === 'GET') {
-    const { password } = req.headers;
-    if (password !== process.env.ADMIN_PASSWORD) {
+    if (!adminRate(req, res)) return;
+    if (!verifyAdmin(req)) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     try {
       const rows = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
       return res.status(200).json(rows);
     } catch (err) {
-      return res.status(500).json({ error: `Query failed: ${err.message}` });
+      console.error('Order list query failed:', err);
+      return res.status(500).json({ error: 'Failed to load orders' });
     }
   }
 
   if (req.method === 'POST') {
+    if (!orderRate(req, res)) return;
+
+    const parsed = OrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid order data' });
+    }
     const {
       customer_name, phone, address, barangay,
       product_type, container_size, quantity,
       need_container, container_quantity,
       payment_method, gcash_number, reference_number,
       notes, total_amount, reward_requested, reward_code,
-    } = req.body;
+    } = parsed.data;
 
-    if (!customer_name || !phone || !address || !barangay || !product_type || !container_size || !quantity || !payment_method) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    // Loyalty redemption: never trust the client. A discount is applied only when
-    // a valid Messenger code is consumed; otherwise the request is stored as
-    // pending for admin approval. `available` re-clamp caps redemption to earned.
     const normPhone = normalizePhone(phone);
     let available = 0;
     try {
@@ -52,7 +78,7 @@ export default async function handler(req, res) {
     } catch (e) {
       available = 0;
     }
-    const requested = Math.max(0, Math.min(parseInt(reward_requested) || 0, parseInt(quantity) || 0));
+    const requested = Math.max(0, Math.min(reward_requested || 0, quantity));
 
     let voucher_count = 0;
     let reward_requested_store = 0;
@@ -71,13 +97,13 @@ export default async function handler(req, res) {
           await sql`UPDATE reward_codes SET used = 1 WHERE id = ${match.id}`;
           voucher_count = Math.min(requested, available);
         } else {
-          reward_requested_store = requested; // invalid/expired code → pending
+          reward_requested_store = requested;
         }
       } catch (e) {
         reward_requested_store = requested;
       }
     } else if (requested > 0) {
-      reward_requested_store = requested; // no code → pending admin approval
+      reward_requested_store = requested;
     }
     const voucher_discount = voucher_count * VOUCHER_VALUE;
     const finalTotal = Math.max(0, (Number(total_amount) || 0) - voucher_discount);
@@ -109,7 +135,8 @@ export default async function handler(req, res) {
         )
       `;
     } catch (err) {
-      return res.status(500).json({ error: `Insert failed: ${err.message}` });
+      console.error('Order insert failed:', err);
+      return res.status(500).json({ error: 'Failed to place order' });
     }
 
     return res.status(201).json({ id, created_at });

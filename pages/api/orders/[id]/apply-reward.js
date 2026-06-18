@@ -1,12 +1,16 @@
 import { initDb } from '@/lib/db';
 import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
+import { verifyAdmin } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
+
+const checkRate = rateLimit({ windowMs: 60_000, max: 20 });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  const { password } = req.headers;
-  if (password !== process.env.ADMIN_PASSWORD) {
+  if (!checkRate(req, res)) return;
+  if (!verifyAdmin(req)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -14,7 +18,8 @@ export default async function handler(req, res) {
   try {
     sql = await initDb();
   } catch (err) {
-    return res.status(500).json({ error: `DB init failed: ${err.message}` });
+    console.error('DB init failed:', err);
+    return res.status(500).json({ error: 'Service temporarily unavailable' });
   }
 
   const { id } = req.query;
@@ -48,6 +53,7 @@ export default async function handler(req, res) {
     `;
     return res.status(200).json({ success: true, applied: allowed, discount, total: newTotal });
   } catch (err) {
-    return res.status(500).json({ error: `Apply failed: ${err.message}` });
+    console.error('Apply reward failed:', err);
+    return res.status(500).json({ error: 'Failed to apply reward' });
   }
 }

@@ -1,18 +1,45 @@
 // Facebook Messenger Webhook
 // Receives messages and stores customer PSID for notifications
 import { initDb } from '@/lib/db';
+import { verifyWebhookSignature } from '@/lib/facebook';
+import { timingSafeEqual } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
 
 const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
+const checkRate = rateLimit({ windowMs: 60_000, max: 60 });
+
+export const config = { api: { bodyParser: false } };
+
+const MAX_BODY_SIZE = 1024 * 256;
+
+function rawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new Error('Payload too large'));
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
 
 export default async function handler(req, res) {
+  if (!checkRate(req, res)) return;
+
   // Webhook verification (GET request from Facebook)
   if (req.method === 'GET') {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('Messenger webhook verified');
+    if (mode === 'subscribe' && VERIFY_TOKEN && timingSafeEqual(token, VERIFY_TOKEN)) {
       return res.status(200).send(challenge);
     }
     return res.status(403).json({ error: 'Verification failed' });
@@ -20,7 +47,25 @@ export default async function handler(req, res) {
 
   // Incoming messages (POST request)
   if (req.method === 'POST') {
-    const body = req.body;
+    let raw;
+    try {
+      raw = await rawBody(req);
+    } catch {
+      return res.status(413).json({ error: 'Payload too large' });
+    }
+    const appSecret = process.env.FB_APP_SECRET;
+    if (!appSecret) {
+      return res.status(500).json({ error: 'Webhook not configured' });
+    }
+    const sig = req.headers['x-hub-signature-256'];
+    if (!verifyWebhookSignature(sig, raw, appSecret)) {
+      return res.status(403).json({ error: 'Invalid signature' });
+    }
+
+    let body;
+    try { body = JSON.parse(raw.toString()); } catch {
+      return res.status(400).json({ error: 'Invalid JSON' });
+    }
 
     if (body.object !== 'page') {
       return res.status(404).json({ error: 'Not a page event' });
@@ -178,9 +223,9 @@ async function sendReply(recipientPsid, messageText) {
   }
 
   try {
-    await fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${FB_PAGE_ACCESS_TOKEN}`, {
+    await fetch('https://graph.facebook.com/v18.0/me/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FB_PAGE_ACCESS_TOKEN}` },
       body: JSON.stringify({
         recipient: { id: recipientPsid },
         message: { text: messageText },

@@ -82,7 +82,7 @@ export default function Track() {
       setOrder(data);
       setLastUpdated(new Date());
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Something went wrong');
       setOrder(null);
     }
     setLoading(false);

@@ -3,17 +3,22 @@ import { computeRewards, normalizePhone } from '@/lib/loyalty';
 import { generateCode, hashCode, CODE_TTL_MINUTES } from '@/lib/reward-codes';
 import { sendMessengerMessage } from '@/lib/facebook';
 import { v4 as uuidv4 } from 'uuid';
+import { rateLimit } from '@/lib/rate-limit';
+
+const checkRate = rateLimit({ windowMs: 60_000, max: 5 });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!checkRate(req, res)) return;
 
   let sql;
   try {
     sql = await initDb();
   } catch (err) {
-    return res.status(500).json({ error: `DB init failed: ${err.message}` });
+    console.error('DB init failed:', err);
+    return res.status(200).json({ sent: false });
   }
 
   const phone = normalizePhone(req.body?.phone);

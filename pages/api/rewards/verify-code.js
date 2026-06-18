@@ -1,17 +1,22 @@
 import { initDb } from '@/lib/db';
 import { computeRewards, normalizePhone } from '@/lib/loyalty';
 import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
+import { rateLimit } from '@/lib/rate-limit';
+
+const checkRate = rateLimit({ windowMs: 60_000, max: 10 });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!checkRate(req, res)) return;
 
   let sql;
   try {
     sql = await initDb();
   } catch (err) {
-    return res.status(500).json({ error: `DB init failed: ${err.message}` });
+    console.error('DB init failed:', err);
+    return res.status(200).json({ valid: false });
   }
 
   const phone = normalizePhone(req.body?.phone);
