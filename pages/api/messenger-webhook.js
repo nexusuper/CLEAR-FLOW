@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     const challenge = req.query['hub.challenge'];
 
     if (mode === 'subscribe' && VERIFY_TOKEN && timingSafeEqual(token, VERIFY_TOKEN)) {
-      return res.status(200).send(challenge);
+      return res.status(200).type('text/plain').send(String(challenge).replace(/[^0-9]/g, ''));
     }
     return res.status(403).json({ error: 'Verification failed' });
   }
@@ -135,11 +135,10 @@ async function linkPsidToOrder(senderPsid, orderId) {
   try {
     const sql = await initDb();
     
-    // Update order with messenger PSID
     const result = await sql`
-      UPDATE orders 
-      SET messenger_psid = ${senderPsid} 
-      WHERE id = ${orderId}
+      UPDATE orders
+      SET messenger_psid = ${senderPsid}
+      WHERE id = ${orderId} AND messenger_psid IS NULL
       RETURNING customer_name, status
     `;
 
@@ -165,11 +164,11 @@ async function linkPsidToPhone(senderPsid, phone) {
   try {
     const sql = await initDb();
     
-    // Update all orders with this phone number
     const result = await sql`
-      UPDATE orders 
-      SET messenger_psid = ${senderPsid} 
-      WHERE phone = ${phone} OR phone = ${formatPhone(phone)}
+      UPDATE orders
+      SET messenger_psid = ${senderPsid}
+      WHERE (phone = ${phone} OR phone = ${formatPhone(phone)})
+        AND messenger_psid IS NULL
       RETURNING id, customer_name, status
     `;
 

@@ -2,7 +2,7 @@ import { initDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
 import { hashCode } from '@/lib/reward-codes';
-import { verifyAdmin } from '@/lib/auth';
+import { verifyAdmin, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
         `;
         const nowIso = new Date().toISOString();
         const match = codeRows.find(
-          (r) => r.expires_at > nowIso && r.code_hash === hashCode(normPhone, String(reward_code))
+          (r) => r.expires_at > nowIso && timingSafeEqual(r.code_hash, hashCode(normPhone, String(reward_code)))
         );
         if (match) {
           await sql`UPDATE reward_codes SET used = 1 WHERE id = ${match.id}`;

@@ -1,6 +1,7 @@
 import { initDb } from '@/lib/db';
 import { computeRewards, normalizePhone } from '@/lib/loyalty';
 import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
+import { timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 10 });
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
     }
     await sql`UPDATE reward_codes SET attempts = attempts + 1 WHERE id = ${row.id}`;
 
-    if (row.code_hash === hashCode(phone, code)) {
+    if (timingSafeEqual(row.code_hash, hashCode(phone, code))) {
       const orderRows = await sql`
         SELECT status, container_size, quantity, voucher_count
         FROM orders
