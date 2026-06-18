@@ -46,10 +46,35 @@ export default async function handler(req, res) {
       const page = Math.max(1, parseInt(req.query.page) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
       const offset = (page - 1) * limit;
+      const statusFilter = req.query.status || '';
+      const search = (req.query.search || '').trim();
+      const sortParam = req.query.sort || 'date_desc';
+
+      const validStatuses = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
+      const hasStatus = validStatuses.includes(statusFilter);
+      const hasSearch = search.length > 0;
+      const searchPattern = `%${search}%`;
+
+      const sortMap = {
+        date_desc: sql`created_at DESC`,
+        date_asc: sql`created_at ASC`,
+        total_desc: sql`total_amount DESC`,
+        total_asc: sql`total_amount ASC`,
+        name_asc: sql`customer_name ASC`,
+        name_desc: sql`customer_name DESC`,
+        status_asc: sql`status ASC`,
+      };
+      const orderBy = sortMap[sortParam] || sql`created_at DESC`;
+
+      const where =
+        hasStatus && hasSearch ? sql`WHERE status = ${statusFilter} AND (customer_name ILIKE ${searchPattern} OR phone ILIKE ${searchPattern} OR id ILIKE ${searchPattern})`
+        : hasStatus ? sql`WHERE status = ${statusFilter}`
+        : hasSearch ? sql`WHERE (customer_name ILIKE ${searchPattern} OR phone ILIKE ${searchPattern} OR id ILIKE ${searchPattern})`
+        : sql``;
 
       const [rows, countResult, statusRows] = await Promise.all([
-        sql`SELECT * FROM orders ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
-        sql`SELECT COUNT(*)::int AS total FROM orders`,
+        sql`SELECT * FROM orders ${where} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
+        sql`SELECT COUNT(*)::int AS total FROM orders ${where}`,
         sql`SELECT status, COUNT(*)::int AS count FROM orders GROUP BY status`,
       ]);
 
@@ -59,7 +84,7 @@ export default async function handler(req, res) {
         orders: rows,
         total,
         page,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit) || 1,
         statusCounts,
       });
     } catch (err) {

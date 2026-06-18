@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import ClayIcon from './ui/ClayIcon';
 
@@ -31,38 +31,6 @@ const SORT_OPTIONS = [
   { value: 'status_asc', label: 'Status' },
 ];
 
-function getSortValue(order, field) {
-  if (field === 'date') return order.created_at;
-  if (field === 'total') return order.total_amount;
-  if (field === 'name') return order.customer_name.toLowerCase();
-  if (field === 'status') return order.status;
-  return '';
-}
-
-function applySort(list, sortBy) {
-  const parts = sortBy.split('_');
-  const dir = parts[parts.length - 1];
-  const field = parts.slice(0, -1).join('_');
-  return [...list].sort(function (a, b) {
-    var av = getSortValue(a, field);
-    var bv = getSortValue(b, field);
-    if (av < bv) return dir === 'asc' ? -1 : 1;
-    if (av > bv) return dir === 'asc' ? 1 : -1;
-    return 0;
-  });
-}
-
-function applyFilter(orders, filter, search) {
-  return orders.filter(function (o) {
-    var matchFilter = filter === 'all' || o.status === filter;
-    var q = search.toLowerCase();
-    var matchSearch = !search ||
-      o.customer_name.toLowerCase().includes(q) ||
-      o.phone.includes(search) ||
-      o.id.toLowerCase().includes(q);
-    return matchFilter && matchSearch;
-  });
-}
 
 function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
@@ -156,11 +124,21 @@ export default function AdminPanel() {
     setAuthed(true);
   }
 
-  async function fetchOrders(p) {
+  async function fetchOrders(p, overrides) {
+    const f = overrides?.filter ?? filter;
+    const s = overrides?.search ?? search;
+    const sort = overrides?.sortBy ?? sortBy;
     const target = p || page;
-    const res = await fetch(`/api/orders?page=${target}&limit=50`, { headers: { password: savedPassword } });
+    const params = new URLSearchParams({ page: target, limit: 50, sort });
+    if (f && f !== 'all') params.set('status', f);
+    if (s) params.set('search', s);
+    const res = await fetch(`/api/orders?${params}`, { headers: { password: savedPassword } });
     if (res.ok) {
-      applyPageData(await res.json());
+      const data = await res.json();
+      if (data.orders.length === 0 && data.page > 1) {
+        return fetchOrders(data.page - 1, overrides);
+      }
+      applyPageData(data);
     }
   }
 
@@ -234,10 +212,14 @@ export default function AdminPanel() {
     setBulkDeleteModal(false);
   }
 
-  const filtered = useMemo(
-    function () { return applySort(applyFilter(orders, filter, search), sortBy); },
-    [orders, filter, search, sortBy]
-  );
+  const searchTimer = useRef(null);
+  function handleSearchChange(val) {
+    setSearch(val);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => { setPage(1); fetchOrders(1, { search: val }); }, 400);
+  }
+
+  const filtered = orders;
 
   const deletableInView = filtered.filter((o) => DELETABLE_STATUSES.includes(o.status));
   const allSelected = deletableInView.length > 0 && deletableInView.every((o) => selected.includes(o.id));
@@ -289,7 +271,7 @@ export default function AdminPanel() {
             {STATUS_OPTIONS.map((s) => (
               <button
                 key={s.value}
-                onClick={() => setFilter(filter === s.value ? 'all' : s.value)}
+                onClick={() => { const next = filter === s.value ? 'all' : s.value; setFilter(next); setPage(1); fetchOrders(1, { filter: next }); }}
                 className={'rounded-2xl p-3 text-center clay-raised-sm ' + (filter === s.value ? 'clay-tile-selected' : '')}
               >
                 <div className="text-2xl font-bold text-sky-700">{statusCounts[s.value] || 0}</div>
@@ -303,13 +285,13 @@ export default function AdminPanel() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search by name, phone, or order ID..."
               className="clay-input flex-1"
             />
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
+              onChange={(e) => { setSortBy(e.target.value); fetchOrders(1, { sortBy: e.target.value }); setPage(1); }}
               className="clay-input"
             >
               {SORT_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
