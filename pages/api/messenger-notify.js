@@ -2,6 +2,8 @@ import { initDb } from '@/lib/db';
 import { sendMessengerMessage } from '@/lib/facebook';
 import { verifyAdmin } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { v4 as uuidv4 } from 'uuid';
+import { normalizePhone } from '@/lib/loyalty';
 
 const MESSAGES = {
   confirmed: (name, id) =>
@@ -51,6 +53,16 @@ export default async function handler(req, res) {
 
     const messageText = MESSAGES[status](order.customer_name, order.id);
     await sendMessengerMessage(order.messenger_psid, messageText);
+
+    const normPhone = normalizePhone(order.phone);
+    try {
+      await sql`
+        INSERT INTO contact_log (id, phone_normalized, channel, direction, summary, order_id, created_at)
+        VALUES (${uuidv4().slice(0, 8).toUpperCase()}, ${normPhone}, 'messenger', 'outbound', ${messageText}, ${orderId}, ${new Date().toISOString()})
+      `;
+    } catch (logErr) {
+      console.error('Contact log insert failed:', logErr);
+    }
 
     return res.status(200).json({
       success: true,
