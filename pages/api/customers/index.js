@@ -41,7 +41,9 @@ export default async function handler(req, res) {
       total_spent_desc: sql`total_spent DESC`,
       total_spent_asc: sql`total_spent ASC`,
       total_orders_desc: sql`total_orders DESC`,
+      total_orders_asc: sql`total_orders ASC`,
       name_asc: sql`customer_name ASC`,
+      name_desc: sql`customer_name DESC`,
     };
     const orderBy = sortMap[sortParam] || sql`last_order DESC`;
 
@@ -52,9 +54,8 @@ export default async function handler(req, res) {
         SELECT COUNT(*)::int AS total FROM (
           SELECT o.phone_normalized
           FROM orders o
-          LEFT JOIN customer_notes cn ON cn.phone_normalized = o.phone_normalized
           WHERE (o.customer_name ILIKE ${searchPattern} OR o.phone ILIKE ${searchPattern})
-            AND cn.tags ILIKE ${tagPattern}
+            AND EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
           GROUP BY o.phone_normalized
         ) sub
       `;
@@ -67,11 +68,10 @@ export default async function handler(req, res) {
           MIN(o.created_at) AS first_order,
           MAX(o.created_at) AS last_order,
           BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE(MAX(cn.tags), '') AS tags
+          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
         FROM orders o
-        LEFT JOIN customer_notes cn ON cn.phone_normalized = o.phone_normalized
         WHERE (o.customer_name ILIKE ${searchPattern} OR o.phone ILIKE ${searchPattern})
-          AND cn.tags ILIKE ${tagPattern}
+          AND EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
         GROUP BY o.phone_normalized
         ORDER BY ${orderBy}
         LIMIT ${limit} OFFSET ${offset}
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
           MIN(o.created_at) AS first_order,
           MAX(o.created_at) AS last_order,
           BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE((SELECT cn.tags FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized LIMIT 1), '') AS tags
+          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
         FROM orders o
         WHERE o.customer_name ILIKE ${searchPattern} OR o.phone ILIKE ${searchPattern}
         GROUP BY o.phone_normalized
@@ -105,8 +105,7 @@ export default async function handler(req, res) {
         SELECT COUNT(*)::int AS total FROM (
           SELECT o.phone_normalized
           FROM orders o
-          INNER JOIN customer_notes cn ON cn.phone_normalized = o.phone_normalized
-          WHERE cn.tags ILIKE ${tagPattern}
+          WHERE EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
           GROUP BY o.phone_normalized
         ) sub
       `;
@@ -119,10 +118,9 @@ export default async function handler(req, res) {
           MIN(o.created_at) AS first_order,
           MAX(o.created_at) AS last_order,
           BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE(MAX(cn.tags), '') AS tags
+          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
         FROM orders o
-        INNER JOIN customer_notes cn ON cn.phone_normalized = o.phone_normalized
-        WHERE cn.tags ILIKE ${tagPattern}
+        WHERE EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
         GROUP BY o.phone_normalized
         ORDER BY ${orderBy}
         LIMIT ${limit} OFFSET ${offset}
@@ -142,7 +140,7 @@ export default async function handler(req, res) {
           MIN(o.created_at) AS first_order,
           MAX(o.created_at) AS last_order,
           BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE((SELECT cn.tags FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized LIMIT 1), '') AS tags
+          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
         FROM orders o
         GROUP BY o.phone_normalized
         ORDER BY ${orderBy}

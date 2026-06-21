@@ -268,6 +268,10 @@ export default function AdminPanel() {
   }
 
   async function fetchCustomerDetail(phone) {
+    setNewNote('');
+    setNewTags('');
+    setNewLogSummary('');
+    setNewLogChannel('manual');
     try {
       const res = await fetch(`/api/customers/${phone}`, { headers: { password: savedPassword } });
       if (res.ok) setSelectedCustomer(await res.json());
@@ -771,14 +775,17 @@ export default function AdminPanel() {
                             {c.last_order ? new Date(c.last_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
                           </td>
                           <td className="px-4 py-3">
-                            {c.tags && c.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {c.tags.slice(0, 3).map((t) => (
-                                  <span key={t} className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">{t}</span>
-                                ))}
-                                {c.tags.length > 3 && <span className="text-[10px] text-gray-400">+{c.tags.length - 3}</span>}
-                              </div>
-                            )}
+                            {c.tags && c.tags.length > 0 && (() => {
+                              const tagList = (typeof c.tags === 'string' ? c.tags.split(',').filter(Boolean) : c.tags);
+                              return tagList.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {tagList.slice(0, 3).map((t) => (
+                                    <span key={t} className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">{t.trim()}</span>
+                                  ))}
+                                  {tagList.length > 3 && <span className="text-[10px] text-gray-400">+{tagList.length - 3}</span>}
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       ))}
@@ -853,7 +860,7 @@ export default function AdminPanel() {
                       <div className="text-xs text-gray-500">Avg Order</div>
                     </div>
                     <div className="clay-raised-sm rounded-2xl p-3 text-center">
-                      <div className="text-xl font-bold text-emerald-600">{selectedCustomer.loyalty?.freeRefillsEarned ?? 0}</div>
+                      <div className="text-xl font-bold text-emerald-600">{selectedCustomer.loyalty?.available ?? 0}</div>
                       <div className="text-xs text-gray-500">Free Refills</div>
                     </div>
                   </div>
@@ -866,13 +873,13 @@ export default function AdminPanel() {
                           <ClayIcon name="star" className="w-4 h-4 inline text-amber-500 mr-1" /> Loyalty Progress
                         </span>
                         <span className="text-xs text-gray-500">
-                          {selectedCustomer.loyalty.currentProgress}/{selectedCustomer.loyalty.threshold} refills
+                          {selectedCustomer.loyalty.deliveredGallons} gal delivered &middot; {selectedCustomer.loyalty.gallonsToNext} gal to next free refill
                         </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2.5">
                         <div
                           className="bg-amber-500 h-2.5 rounded-full transition-all"
-                          style={{ width: `${Math.min(100, (selectedCustomer.loyalty.currentProgress / selectedCustomer.loyalty.threshold) * 100)}%` }}
+                          style={{ width: `${Math.min(100, selectedCustomer.loyalty.progressPct * 100)}%` }}
                         />
                       </div>
                     </div>
@@ -971,10 +978,11 @@ export default function AdminPanel() {
                           className="clay-input text-sm"
                         >
                           <option value="manual">Manual</option>
+                          <option value="call">Call</option>
                           <option value="sms">SMS</option>
                           <option value="messenger">Messenger</option>
-                          <option value="phone">Phone</option>
                           <option value="viber">Viber</option>
+                          <option value="in-person">In Person</option>
                         </select>
                         <input
                           type="text"

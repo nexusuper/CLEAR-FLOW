@@ -8,7 +8,7 @@ import { z } from 'zod';
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 
 const LogSchema = z.object({
-  channel: z.enum(['sms', 'messenger', 'manual', 'call', 'in-person']),
+  channel: z.enum(['sms', 'messenger', 'manual', 'call', 'viber', 'in-person']),
   direction: z.enum(['outbound', 'inbound']),
   summary: z.string().min(1).max(2000),
   order_id: z.string().max(20).optional().nullable(),
