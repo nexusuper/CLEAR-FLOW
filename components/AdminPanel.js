@@ -109,6 +109,23 @@ export default function AdminPanel() {
   const [totalOrders, setTotalOrders] = useState(0);
   const [statusCounts, setStatusCounts] = useState({});
 
+  const [activeTab, setActiveTab] = useState('orders');
+  const [customers, setCustomers] = useState([]);
+  const [custPage, setCustPage] = useState(1);
+  const [custTotalPages, setCustTotalPages] = useState(1);
+  const [custTotal, setCustTotal] = useState(0);
+  const [custSearch, setCustSearch] = useState('');
+  const [custSort, setCustSort] = useState('last_order_desc');
+  const [custStats, setCustStats] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [custLoading, setCustLoading] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [newTags, setNewTags] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [newLogSummary, setNewLogSummary] = useState('');
+  const [newLogChannel, setNewLogChannel] = useState('manual');
+  const [savingLog, setSavingLog] = useState(false);
+
   function applyPageData(data) {
     setOrders(data.orders);
     setTotalOrders(data.total);
@@ -219,6 +236,110 @@ export default function AdminPanel() {
     searchTimer.current = setTimeout(() => { setPage(1); fetchOrders(1, { search: val }); }, 400);
   }
 
+  async function fetchCustomers(p, overrides) {
+    setCustLoading(true);
+    const s = overrides?.search ?? custSearch;
+    const sort = overrides?.sort ?? custSort;
+    const target = p || custPage;
+    const params = new URLSearchParams({ page: target, limit: 50, sort });
+    if (s) params.set('search', s);
+    try {
+      const res = await fetch(`/api/customers?${params}`, { headers: { password: savedPassword } });
+      if (res.ok) {
+        const data = await res.json();
+        setCustomers(data.customers);
+        setCustTotal(data.total);
+        setCustTotalPages(data.totalPages);
+        setCustPage(data.page);
+      }
+    } catch (e) {
+      console.error('Failed to fetch customers:', e);
+    }
+    setCustLoading(false);
+  }
+
+  async function fetchCustStats() {
+    try {
+      const res = await fetch('/api/customers/stats', { headers: { password: savedPassword } });
+      if (res.ok) setCustStats(await res.json());
+    } catch (e) {
+      console.error('Failed to fetch customer stats:', e);
+    }
+  }
+
+  async function fetchCustomerDetail(phone) {
+    try {
+      const res = await fetch(`/api/customers/${phone}`, { headers: { password: savedPassword } });
+      if (res.ok) setSelectedCustomer(await res.json());
+    } catch (e) {
+      console.error('Failed to fetch customer detail:', e);
+    }
+  }
+
+  async function saveNote() {
+    if (!newNote.trim() || !selectedCustomer) return;
+    setSavingNote(true);
+    try {
+      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ content: newNote, tags: newTags }),
+      });
+      setNewNote('');
+      setNewTags('');
+      await fetchCustomerDetail(selectedCustomer.phone_normalized);
+      fetchCustomers();
+    } catch (e) {
+      console.error('Failed to save note:', e);
+    }
+    setSavingNote(false);
+  }
+
+  async function deleteNote(noteId) {
+    if (!selectedCustomer) return;
+    try {
+      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/notes/${noteId}`, {
+        method: 'DELETE',
+        headers: { password: savedPassword },
+      });
+      await fetchCustomerDetail(selectedCustomer.phone_normalized);
+      fetchCustomers();
+    } catch (e) {
+      console.error('Failed to delete note:', e);
+    }
+  }
+
+  async function saveContactLog() {
+    if (!newLogSummary.trim() || !selectedCustomer) return;
+    setSavingLog(true);
+    try {
+      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/contact-log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ channel: newLogChannel, direction: 'outbound', summary: newLogSummary }),
+      });
+      setNewLogSummary('');
+      await fetchCustomerDetail(selectedCustomer.phone_normalized);
+    } catch (e) {
+      console.error('Failed to save contact log:', e);
+    }
+    setSavingLog(false);
+  }
+
+  const custSearchTimer = useRef(null);
+  function handleCustSearchChange(val) {
+    setCustSearch(val);
+    clearTimeout(custSearchTimer.current);
+    custSearchTimer.current = setTimeout(() => { setCustPage(1); fetchCustomers(1, { search: val }); }, 400);
+  }
+
+  useEffect(() => {
+    if (activeTab === 'customers' && authed && customers.length === 0) {
+      fetchCustomers(1);
+      fetchCustStats();
+    }
+  }, [activeTab, authed]);
+
   const filtered = orders;
 
   const deletableInView = filtered.filter((o) => DELETABLE_STATUSES.includes(o.status));
@@ -246,25 +367,46 @@ export default function AdminPanel() {
       <div className="min-h-screen bg-clay-bg">
 
         {/* Header */}
-        <div className="text-white px-6 py-4 flex items-center justify-between" style={{ background: 'linear-gradient(160deg,#38bdf8,#0284c7)' }}>
-          <div>
-            <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
-            <p className="text-sky-200 text-sm">{totalOrders} total orders</p>
+        <div className="text-white" style={{ background: 'linear-gradient(160deg,#38bdf8,#0284c7)' }}>
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
+              <p className="text-sky-200 text-sm">
+                {activeTab === 'orders' ? `${totalOrders} total orders` : `${custTotal} customers`}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => activeTab === 'orders' ? fetchOrders() : (fetchCustomers(1), fetchCustStats())} className="bg-sky-500 hover:bg-sky-400 px-4 py-2 rounded-full text-sm font-medium transition-colors">
+                <ClayIcon name="refresh" className="w-4 h-4 inline" /> Refresh
+              </button>
+              <button
+                onClick={() => { setAuthed(false); setOrders([]); setSavedPassword(''); setCustomers([]); setSelectedCustomer(null); }}
+                className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </div>
-          <div className="flex gap-3">
-            <button onClick={fetchOrders} className="bg-sky-500 hover:bg-sky-400 px-4 py-2 rounded-full text-sm font-medium transition-colors">
-              <ClayIcon name="refresh" className="w-4 h-4 inline" /> Refresh
+          <div className="flex gap-1 px-6 pb-0">
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'orders' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="clipboard" className="w-4 h-4 inline mr-1" /> Orders
             </button>
             <button
-              onClick={() => { setAuthed(false); setOrders([]); setSavedPassword(''); }}
-              className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm transition-colors"
+              onClick={() => setActiveTab('customers')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'customers' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
-              Logout
+              <ClayIcon name="users" className="w-4 h-4 inline mr-1" /> Customers
             </button>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 py-6">
+
+          {/* ===== ORDERS TAB ===== */}
+          {activeTab === 'orders' && (<>
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
@@ -531,6 +673,398 @@ export default function AdminPanel() {
               </button>
             </div>
           )}
+
+          </>)}
+
+          {/* ===== CUSTOMERS TAB ===== */}
+          {activeTab === 'customers' && (<>
+
+          {/* Customer Stats Dashboard */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div className="rounded-2xl p-4 text-center clay-raised-sm">
+              <ClayIcon name="users" className="w-6 h-6 mx-auto mb-1 text-sky-600" />
+              <div className="text-2xl font-bold text-sky-700">{custStats?.totalCustomers ?? '-'}</div>
+              <div className="text-xs text-gray-500">Total Customers</div>
+            </div>
+            <div className="rounded-2xl p-4 text-center clay-raised-sm">
+              <ClayIcon name="check" className="w-6 h-6 mx-auto mb-1 text-green-600" />
+              <div className="text-2xl font-bold text-green-700">{custStats?.activeThisMonth ?? '-'}</div>
+              <div className="text-xs text-gray-500">Active This Month</div>
+            </div>
+            <div className="rounded-2xl p-4 text-center clay-raised-sm">
+              <ClayIcon name="star" className="w-6 h-6 mx-auto mb-1 text-amber-500" />
+              <div className="text-2xl font-bold text-amber-600">{custStats?.newThisMonth ?? '-'}</div>
+              <div className="text-xs text-gray-500">New This Month</div>
+            </div>
+            <div className="rounded-2xl p-4 text-center clay-raised-sm">
+              <ClayIcon name="user" className="w-6 h-6 mx-auto mb-1 text-purple-600" />
+              <div className="text-lg font-bold text-purple-700 truncate">{custStats?.topSpender?.name ?? '-'}</div>
+              <div className="text-xs text-gray-500">Top Spender</div>
+            </div>
+          </div>
+
+          {/* Customer Search + Sort */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <input
+              type="text"
+              value={custSearch}
+              onChange={(e) => handleCustSearchChange(e.target.value)}
+              placeholder="Search customers by name or phone..."
+              className="clay-input flex-1"
+            />
+            <select
+              value={custSort}
+              onChange={(e) => { setCustSort(e.target.value); fetchCustomers(1, { sort: e.target.value }); setCustPage(1); }}
+              className="clay-input"
+            >
+              <option value="last_order_desc">Last Order: Newest</option>
+              <option value="last_order_asc">Last Order: Oldest</option>
+              <option value="total_spent_desc">Spent: High to Low</option>
+              <option value="total_spent_asc">Spent: Low to High</option>
+              <option value="total_orders_desc">Orders: Most</option>
+              <option value="total_orders_asc">Orders: Fewest</option>
+              <option value="name_asc">Name: A to Z</option>
+              <option value="name_desc">Name: Z to A</option>
+            </select>
+          </div>
+
+          {/* Customer Table */}
+          <div className="clay-raised rounded-3xl overflow-hidden">
+            {custLoading ? (
+              <div className="text-center py-12 text-gray-400">Loading customers...</div>
+            ) : customers.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">No customers found</div>
+            ) : (
+              <>
+                <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                  <span className="text-xs text-gray-400">Showing {customers.length} of {custTotal} customers (page {custPage})</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Customer</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Phone</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Orders</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Total Spent</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Last Order</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Tags</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customers.map((c, i) => (
+                        <tr
+                          key={c.phone_normalized}
+                          onClick={() => fetchCustomerDetail(c.phone_normalized)}
+                          className={'cursor-pointer hover:bg-sky-50 transition-colors ' + (i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-800 flex items-center gap-1">
+                              {c.customer_name}
+                              {c.has_messenger && <ClayIcon name="chat" title="Messenger linked" className="w-4 h-4 inline text-blue-500" />}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-xs font-mono">{c.phone_display || c.phone_normalized}</td>
+                          <td className="px-4 py-3 font-bold text-sky-600">{c.total_orders}</td>
+                          <td className="px-4 py-3 font-bold text-sky-600">{'₱'}{c.total_spent}</td>
+                          <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                            {c.last_order ? new Date(c.last_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {c.tags && c.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {c.tags.slice(0, 3).map((t) => (
+                                  <span key={t} className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">{t}</span>
+                                ))}
+                                {c.tags.length > 3 && <span className="text-[10px] text-gray-400">+{c.tags.length - 3}</span>}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Customer Pagination */}
+          {custTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                onClick={() => fetchCustomers(custPage - 1)}
+                disabled={custPage <= 1}
+                className="px-4 py-2 rounded-full text-sm font-semibold clay-raised-sm disabled:opacity-40 hover:bg-sky-50 transition-colors"
+              >
+                ← Prev
+              </button>
+              <span className="text-sm text-gray-500 px-3">
+                Page {custPage} of {custTotalPages}
+              </span>
+              <button
+                onClick={() => fetchCustomers(custPage + 1)}
+                disabled={custPage >= custTotalPages}
+                className="px-4 py-2 rounded-full text-sm font-semibold clay-raised-sm disabled:opacity-40 hover:bg-sky-50 transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+
+          {/* ===== CUSTOMER DETAIL SLIDE-OUT ===== */}
+          {selectedCustomer && (
+            <div className="fixed inset-0 z-50 flex justify-end">
+              <div className="absolute inset-0 bg-black/30" onClick={() => setSelectedCustomer(null)} />
+              <div className="relative w-full max-w-xl bg-clay-bg overflow-y-auto shadow-2xl">
+                {/* Detail Header */}
+                <div className="sticky top-0 z-10 text-white px-6 py-4" style={{ background: 'linear-gradient(160deg,#38bdf8,#0284c7)' }}>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setSelectedCustomer(null)} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors">
+                      <ClayIcon name="arrow-left" className="w-4 h-4" />
+                    </button>
+                    <div className="flex-1">
+                      <h2 className="text-lg font-bold flex items-center gap-2">
+                        {selectedCustomer.customer_name}
+                        {selectedCustomer.has_messenger && (
+                          <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">Messenger</span>
+                        )}
+                      </h2>
+                      <p className="text-sky-200 text-sm">{selectedCustomer.phone_display || selectedCustomer.phone_normalized}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="clay-raised-sm rounded-2xl p-3 text-center">
+                      <div className="text-xl font-bold text-sky-700">{selectedCustomer.total_orders}</div>
+                      <div className="text-xs text-gray-500">Total Orders</div>
+                    </div>
+                    <div className="clay-raised-sm rounded-2xl p-3 text-center">
+                      <div className="text-xl font-bold text-sky-700">{'₱'}{selectedCustomer.total_spent}</div>
+                      <div className="text-xs text-gray-500">Total Spent</div>
+                    </div>
+                    <div className="clay-raised-sm rounded-2xl p-3 text-center">
+                      <div className="text-xl font-bold text-sky-700">
+                        {selectedCustomer.total_orders > 0 ? `₱${Math.round(selectedCustomer.total_spent / selectedCustomer.total_orders)}` : '-'}
+                      </div>
+                      <div className="text-xs text-gray-500">Avg Order</div>
+                    </div>
+                    <div className="clay-raised-sm rounded-2xl p-3 text-center">
+                      <div className="text-xl font-bold text-emerald-600">{selectedCustomer.loyalty?.freeRefillsEarned ?? 0}</div>
+                      <div className="text-xs text-gray-500">Free Refills</div>
+                    </div>
+                  </div>
+
+                  {/* Loyalty Progress */}
+                  {selectedCustomer.loyalty && (
+                    <div className="clay-raised-sm rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-gray-700">
+                          <ClayIcon name="star" className="w-4 h-4 inline text-amber-500 mr-1" /> Loyalty Progress
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {selectedCustomer.loyalty.currentProgress}/{selectedCustomer.loyalty.threshold} refills
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div
+                          className="bg-amber-500 h-2.5 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, (selectedCustomer.loyalty.currentProgress / selectedCustomer.loyalty.threshold) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Customer Info */}
+                  <div className="clay-raised-sm rounded-2xl p-4 space-y-2">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                      <ClayIcon name="info" className="w-4 h-4 inline mr-1" /> Customer Info
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="text-gray-400">Phone:</span></div>
+                      <div className="font-mono text-gray-700">{selectedCustomer.phone_display || selectedCustomer.phone_normalized}</div>
+                      <div><span className="text-gray-400">First Order:</span></div>
+                      <div className="text-gray-700">{selectedCustomer.first_order ? new Date(selectedCustomer.first_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</div>
+                      <div><span className="text-gray-400">Last Order:</span></div>
+                      <div className="text-gray-700">{selectedCustomer.last_order ? new Date(selectedCustomer.last_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</div>
+                      <div><span className="text-gray-400">Messenger:</span></div>
+                      <div>{selectedCustomer.has_messenger ? <span className="text-blue-600 font-medium">Linked</span> : <span className="text-gray-400">Not linked</span>}</div>
+                    </div>
+                  </div>
+
+                  {/* Notes Section */}
+                  <div className="clay-raised-sm rounded-2xl p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                      <ClayIcon name="note" className="w-4 h-4 inline mr-1" /> Notes
+                    </h3>
+                    {/* Add Note Form */}
+                    <div className="mb-3 space-y-2">
+                      <textarea
+                        value={newNote}
+                        onChange={(e) => setNewNote(e.target.value)}
+                        placeholder="Add a note..."
+                        rows={2}
+                        className="clay-input w-full text-sm"
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newTags}
+                          onChange={(e) => setNewTags(e.target.value)}
+                          placeholder="Tags (comma-separated)"
+                          className="clay-input flex-1 text-sm"
+                        />
+                        <button
+                          onClick={saveNote}
+                          disabled={savingNote || !newNote.trim()}
+                          className="clay-btn-primary clay-pressable rounded-full px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
+                        >
+                          {savingNote ? 'Saving...' : 'Add'}
+                        </button>
+                      </div>
+                    </div>
+                    {/* Notes List */}
+                    {selectedCustomer.notes && selectedCustomer.notes.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedCustomer.notes.map((n) => (
+                          <div key={n.id} className="clay-inset rounded-xl p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <p className="text-sm text-gray-700">{n.content}</p>
+                                {n.tags && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {(typeof n.tags === 'string' ? n.tags.split(',').filter(Boolean) : n.tags).map((t) => (
+                                      <span key={t} className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">{t.trim()}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                  {new Date(n.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              <button onClick={() => deleteNote(n.id)} title="Delete note" className="text-red-400 hover:text-red-600 transition-colors p-1">
+                                <ClayIcon name="trash" className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 text-center py-2">No notes yet</p>
+                    )}
+                  </div>
+
+                  {/* Contact Log */}
+                  <div className="clay-raised-sm rounded-2xl p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                      <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> Contact Log
+                    </h3>
+                    {/* Add Log Entry */}
+                    <div className="mb-3 space-y-2">
+                      <div className="flex gap-2">
+                        <select
+                          value={newLogChannel}
+                          onChange={(e) => setNewLogChannel(e.target.value)}
+                          className="clay-input text-sm"
+                        >
+                          <option value="manual">Manual</option>
+                          <option value="sms">SMS</option>
+                          <option value="messenger">Messenger</option>
+                          <option value="phone">Phone</option>
+                          <option value="viber">Viber</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={newLogSummary}
+                          onChange={(e) => setNewLogSummary(e.target.value)}
+                          placeholder="Contact summary..."
+                          className="clay-input flex-1 text-sm"
+                        />
+                        <button
+                          onClick={saveContactLog}
+                          disabled={savingLog || !newLogSummary.trim()}
+                          className="clay-btn-primary clay-pressable rounded-full px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
+                        >
+                          {savingLog ? '...' : 'Log'}
+                        </button>
+                      </div>
+                    </div>
+                    {/* Log Timeline */}
+                    {selectedCustomer.contactLog && selectedCustomer.contactLog.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedCustomer.contactLog.map((log) => (
+                          <div key={log.id} className="clay-inset rounded-xl p-3 flex items-start gap-3">
+                            <div className="flex-shrink-0 mt-0.5">
+                              <ClayIcon name={log.channel === 'messenger' ? 'chat' : log.channel === 'phone' ? 'phone' : 'note'} className="w-4 h-4 text-gray-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-semibold uppercase text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{log.channel}</span>
+                                <span className="text-[10px] text-gray-400">{log.direction}</span>
+                              </div>
+                              <p className="text-sm text-gray-700 mt-0.5">{log.summary}</p>
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                {new Date(log.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 text-center py-2">No contact log entries</p>
+                    )}
+                  </div>
+
+                  {/* Order History */}
+                  <div className="clay-raised-sm rounded-2xl p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                      <ClayIcon name="clipboard" className="w-4 h-4 inline mr-1" /> Order History
+                    </h3>
+                    {selectedCustomer.orders && selectedCustomer.orders.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-100">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">ID</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Date</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Items</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Total</th>
+                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedCustomer.orders.map((ord) => (
+                              <tr key={ord.id} className="border-b border-gray-50">
+                                <td className="px-3 py-2 font-mono text-sky-600 text-xs">{ord.id}</td>
+                                <td className="px-3 py-2 text-gray-400 text-xs whitespace-nowrap">
+                                  {new Date(ord.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                                </td>
+                                <td className="px-3 py-2 text-gray-700 text-xs">{ord.product_type} x{ord.quantity}</td>
+                                <td className="px-3 py-2 font-bold text-sky-600 text-xs">{'₱'}{ord.total_amount}</td>
+                                <td className="px-3 py-2">
+                                  <span className={'text-[10px] font-semibold px-2 py-0.5 rounded-full ' + (STATUS_COLORS[ord.status] || '')}>
+                                    {ord.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 text-center py-2">No orders</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          </>)}
+
         </div>
       </div>
     </>
