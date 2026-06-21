@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
   try {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 
     const [totalRes, activeRes, newRes, topRes] = await Promise.all([
       sql`SELECT COUNT(DISTINCT phone_normalized)::int AS count FROM orders`,
