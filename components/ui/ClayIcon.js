@@ -22,6 +22,12 @@ const PATHS = {
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   cancel: <><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>,
+  users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+  user: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></>,
+  tag: <><path d="M12 2l9 4.5v6L12 22l-9-9.5v-6z" /><circle cx="12" cy="10" r="1.5" /></>,
+  note: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h4" /></>,
+  star: <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />,
+  'arrow-left': <><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></>,
 };
 
 export default function ClayIcon({ name, title, className = 'w-6 h-6', fill = 'none', stroke = 'currentColor', strokeWidth = 2 }) {
