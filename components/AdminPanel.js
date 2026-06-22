@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import ClayIcon from './ui/ClayIcon';
+import { SEGMENT_DEFS } from '@/lib/segments';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
 const DELETABLE_STATUSES = ['delivered', 'cancelled'];
@@ -125,6 +126,15 @@ export default function AdminPanel() {
   const [newLogSummary, setNewLogSummary] = useState('');
   const [newLogChannel, setNewLogChannel] = useState('manual');
   const [savingLog, setSavingLog] = useState(false);
+  const [custSegment, setCustSegment] = useState('');
+  const [allTags, setAllTags] = useState([]);
+  const [custTagFilter, setCustTagFilter] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [quickMessage, setQuickMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [messageResult, setMessageResult] = useState(null);
+  const [showTagInput, setShowTagInput] = useState(false);
+  const [tagInputValue, setTagInputValue] = useState('');
 
   function applyPageData(data) {
     setOrders(data.orders);
@@ -243,6 +253,10 @@ export default function AdminPanel() {
     const target = p || custPage;
     const params = new URLSearchParams({ page: target, limit: 50, sort });
     if (s) params.set('search', s);
+    const seg = overrides?.segment ?? custSegment;
+    if (seg) params.set('segment', seg);
+    const tag = overrides?.tag ?? custTagFilter;
+    if (tag) params.set('tag', tag);
     try {
       const res = await fetch(`/api/customers?${params}`, { headers: { password: savedPassword } });
       if (res.ok) {
@@ -272,6 +286,10 @@ export default function AdminPanel() {
     setNewTags('');
     setNewLogSummary('');
     setNewLogChannel('manual');
+    setQuickMessage('');
+    setMessageResult(null);
+    setShowTagInput(false);
+    setTagInputValue('');
     try {
       const res = await fetch(`/api/customers/${phone}`, { headers: { password: savedPassword } });
       if (res.ok) setSelectedCustomer(await res.json());
@@ -337,10 +355,107 @@ export default function AdminPanel() {
     custSearchTimer.current = setTimeout(() => { setCustPage(1); fetchCustomers(1, { search: val }); }, 400);
   }
 
+  async function fetchAllTags() {
+    try {
+      const res = await fetch('/api/customers/tags', { headers: { password: savedPassword } });
+      if (res.ok) {
+        const data = await res.json();
+        setAllTags(data.tags || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch tags:', e);
+    }
+  }
+
+  async function exportCSV() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ sort: custSort });
+      if (custSearch) params.set('search', custSearch);
+      if (custTagFilter) params.set('tag', custTagFilter);
+      if (custSegment) params.set('segment', custSegment);
+      const res = await fetch(`/api/customers/export?${params}`, { headers: { password: savedPassword } });
+      if (!res.ok) throw new Error('Export failed');
+      const data = await res.json();
+      const headers = ['Name', 'Phone', 'Total Orders', 'Total Spent', 'First Order', 'Last Order', 'Segment', 'Tags'];
+      const csvRows = [headers.join(',')];
+      for (const c of data.customers) {
+        const row = [
+          `"${(c.customer_name || '').replace(/"/g, '""')}"`,
+          c.phone_normalized,
+          c.total_orders,
+          c.total_spent,
+          c.first_order || '',
+          c.last_order || '',
+          c.segment || '',
+          `"${(c.tags || '').replace(/"/g, '""')}"`,
+        ];
+        csvRows.push(row.join(','));
+      }
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clear-flow-customers-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export failed:', e);
+    }
+    setExporting(false);
+  }
+
+  async function sendQuickMessage() {
+    if (!quickMessage.trim() || !selectedCustomer) return;
+    setSendingMessage(true);
+    setMessageResult(null);
+    try {
+      const res = await fetch(`/api/customers/${selectedCustomer.phone_normalized}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ message: quickMessage }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessageResult({ success: true });
+        setQuickMessage('');
+        await fetchCustomerDetail(selectedCustomer.phone_normalized);
+      } else {
+        setMessageResult({ error: data.error || 'Failed to send' });
+      }
+    } catch (e) {
+      setMessageResult({ error: 'Network error' });
+    }
+    setSendingMessage(false);
+  }
+
+  async function addTagToCustomer(tag) {
+    if (!tag.trim() || !selectedCustomer) return;
+    const existingTags = (selectedCustomer.notes || []).flatMap((n) =>
+      typeof n.tags === 'string' ? n.tags.split(',').map((t) => t.trim()).filter(Boolean) : []
+    );
+    if (existingTags.includes(tag.trim())) return;
+    try {
+      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ content: `Tag added: ${tag.trim()}`, tags: tag.trim() }),
+      });
+      setTagInputValue('');
+      setShowTagInput(false);
+      await fetchCustomerDetail(selectedCustomer.phone_normalized);
+      fetchCustomers();
+      fetchAllTags();
+    } catch (e) {
+      console.error('Failed to add tag:', e);
+    }
+  }
+
   useEffect(() => {
-    if (activeTab === 'customers' && authed && customers.length === 0) {
-      fetchCustomers(1);
+    if (activeTab === 'customers' && authed) {
+      if (customers.length === 0) fetchCustomers(1);
       fetchCustStats();
+      fetchAllTags();
     }
   }, [activeTab, authed]);
 
@@ -707,6 +822,27 @@ export default function AdminPanel() {
             </div>
           </div>
 
+          {/* Segment Filter */}
+          {custStats?.segmentCounts && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                onClick={() => { setCustSegment(''); fetchCustomers(1, { segment: '' }); }}
+                className={'px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (!custSegment ? 'bg-sky-600 text-white' : 'clay-raised-sm text-gray-600 hover:bg-sky-50')}
+              >
+                All ({custStats.totalCustomers})
+              </button>
+              {SEGMENT_DEFS.map((seg) => (
+                <button
+                  key={seg.value}
+                  onClick={() => { setCustSegment(seg.value); fetchCustomers(1, { segment: seg.value }); }}
+                  className={'px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (custSegment === seg.value ? seg.color + ' ring-2 ring-offset-1 ring-sky-400' : seg.color + ' opacity-70 hover:opacity-100')}
+                >
+                  {seg.label} ({custStats.segmentCounts[seg.value] || 0})
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Customer Search + Sort */}
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
@@ -716,6 +852,16 @@ export default function AdminPanel() {
               placeholder="Search customers by name or phone..."
               className="clay-input flex-1"
             />
+            {allTags.length > 0 && (
+              <select
+                value={custTagFilter}
+                onChange={(e) => { setCustTagFilter(e.target.value); fetchCustomers(1, { tag: e.target.value }); setCustPage(1); }}
+                className="clay-input"
+              >
+                <option value="">All Tags</option>
+                {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
             <select
               value={custSort}
               onChange={(e) => { setCustSort(e.target.value); fetchCustomers(1, { sort: e.target.value }); setCustPage(1); }}
@@ -730,6 +876,14 @@ export default function AdminPanel() {
               <option value="name_asc">Name: A to Z</option>
               <option value="name_desc">Name: Z to A</option>
             </select>
+            <button
+              onClick={exportCSV}
+              disabled={exporting}
+              className="clay-btn-white clay-pressable rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
+            >
+              <ClayIcon name="download" className="w-4 h-4" />
+              {exporting ? 'Exporting...' : 'Export CSV'}
+            </button>
           </div>
 
           {/* Customer Table */}
@@ -753,6 +907,7 @@ export default function AdminPanel() {
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Total Spent</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Last Order</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Tags</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Segment</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -785,6 +940,12 @@ export default function AdminPanel() {
                                   {tagList.length > 3 && <span className="text-[10px] text-gray-400">+{tagList.length - 3}</span>}
                                 </div>
                               );
+                            })()}
+                          </td>
+                          <td className="px-4 py-3">
+                            {c.segment && (() => {
+                              const def = SEGMENT_DEFS.find((s) => s.value === c.segment);
+                              return def ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`}>{def.label}</span> : null;
                             })()}
                           </td>
                         </tr>
@@ -838,6 +999,41 @@ export default function AdminPanel() {
                         )}
                       </h2>
                       <p className="text-sky-200 text-sm">{selectedCustomer.phone_display || selectedCustomer.phone_normalized}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        {selectedCustomer.segment && (() => {
+                          const def = SEGMENT_DEFS.find((s) => s.value === selectedCustomer.segment);
+                          return def ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`}>{def.label}</span> : null;
+                        })()}
+                        {selectedCustomer.notes && selectedCustomer.notes.flatMap((n) =>
+                          (typeof n.tags === 'string' ? n.tags.split(',').filter(Boolean) : [])
+                        ).filter((v, i, a) => a.indexOf(v) === i).map((t) => (
+                          <span key={t} className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">{t.trim()}</span>
+                        ))}
+                        {!showTagInput ? (
+                          <button onClick={() => setShowTagInput(true)} className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded-full transition-colors">
+                            <ClayIcon name="plus" className="w-3 h-3 inline" /> Tag
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={tagInputValue}
+                              onChange={(e) => setTagInputValue(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') addTagToCustomer(tagInputValue); if (e.key === 'Escape') { setShowTagInput(false); setTagInputValue(''); } }}
+                              placeholder="Add tag..."
+                              list="tag-suggestions"
+                              className="text-xs bg-white/20 border-0 rounded-full px-2 py-0.5 text-white placeholder-white/50 outline-none w-24"
+                              autoFocus
+                            />
+                            <datalist id="tag-suggestions">
+                              {allTags.map((t) => <option key={t} value={t} />)}
+                            </datalist>
+                            <button onClick={() => { setShowTagInput(false); setTagInputValue(''); }} className="text-white/60 hover:text-white">
+                              <ClayIcon name="close" className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1025,6 +1221,37 @@ export default function AdminPanel() {
                       <p className="text-xs text-gray-400 text-center py-2">No contact log entries</p>
                     )}
                   </div>
+
+                  {/* Messenger Quick-Send */}
+                  {selectedCustomer.has_messenger && (
+                    <div className="clay-raised-sm rounded-2xl p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                        <ClayIcon name="send" className="w-4 h-4 inline mr-1" /> Send Messenger Message
+                      </h3>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={quickMessage}
+                          onChange={(e) => setQuickMessage(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !sendingMessage) sendQuickMessage(); }}
+                          placeholder="Type a message..."
+                          className="clay-input flex-1 text-sm"
+                        />
+                        <button
+                          onClick={sendQuickMessage}
+                          disabled={sendingMessage || !quickMessage.trim()}
+                          className="clay-btn-primary clay-pressable rounded-full px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
+                        >
+                          {sendingMessage ? '...' : 'Send'}
+                        </button>
+                      </div>
+                      {messageResult && (
+                        <div className={`mt-2 text-xs font-medium ${messageResult.success ? 'text-green-600' : 'text-red-500'}`}>
+                          {messageResult.success ? 'Message sent!' : messageResult.error}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Order History */}
                   <div className="clay-raised-sm rounded-2xl p-4">
