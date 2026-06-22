@@ -1,6 +1,7 @@
 import { initDb } from '@/lib/db';
 import { verifyAdmin } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { computeSegment, SEGMENT_VALUES } from '@/lib/segments';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 
@@ -28,6 +29,8 @@ export default async function handler(req, res) {
     const search = (req.query.search || '').trim();
     const tagFilter = (req.query.tag || '').trim();
     const sortParam = req.query.sort || 'last_order_desc';
+    const segmentFilter = (req.query.segment || '').trim();
+    const hasSegment = segmentFilter.length > 0 && SEGMENT_VALUES.has(segmentFilter);
 
     const hasSearch = search.length > 0;
     const searchPattern = `%${search}%`;
@@ -149,11 +152,20 @@ export default async function handler(req, res) {
     }
 
     const total = countResult[0]?.total ?? 0;
+    const withSegments = rows.map((r) => ({
+      ...r,
+      segment: computeSegment({
+        total_orders: Number(r.total_orders),
+        total_spent: Number(r.total_spent),
+        last_order: r.last_order,
+      }),
+    }));
+    const filtered = hasSegment ? withSegments.filter((r) => r.segment === segmentFilter) : withSegments;
     return res.status(200).json({
-      customers: rows,
-      total,
+      customers: filtered,
+      total: hasSegment ? filtered.length : total,
       page,
-      totalPages: Math.ceil(total / limit) || 1,
+      totalPages: hasSegment ? 1 : Math.ceil(total / limit) || 1,
     });
   } catch (err) {
     console.error('Customer list query failed:', err);

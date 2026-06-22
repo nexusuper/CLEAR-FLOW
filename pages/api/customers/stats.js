@@ -1,6 +1,7 @@
 import { initDb } from '@/lib/db';
 import { verifyAdmin } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { computeSegment } from '@/lib/segments';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 
@@ -45,11 +46,29 @@ export default async function handler(req, res) {
     ]);
 
     const top = topRes[0] || null;
+    const allCusts = await sql`
+      SELECT
+        COUNT(*)::int AS total_orders,
+        SUM(total_amount)::real AS total_spent,
+        MAX(created_at) AS last_order
+      FROM orders
+      GROUP BY phone_normalized
+    `;
+    const segmentCounts = { new: 0, regular: 0, vip: 0, 'at-risk': 0, churned: 0 };
+    for (const c of allCusts) {
+      const seg = computeSegment({
+        total_orders: Number(c.total_orders),
+        total_spent: Number(c.total_spent),
+        last_order: c.last_order,
+      });
+      segmentCounts[seg]++;
+    }
     return res.status(200).json({
       totalCustomers: totalRes[0]?.count ?? 0,
       activeThisMonth: activeRes[0]?.count ?? 0,
       newThisMonth: newRes[0]?.count ?? 0,
       topSpender: top ? { name: top.name, phone: top.phone_normalized, total_spent: top.total_spent } : null,
+      segmentCounts,
     });
   } catch (err) {
     console.error('Customer stats query failed:', err);

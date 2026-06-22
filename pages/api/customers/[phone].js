@@ -2,6 +2,7 @@ import { initDb } from '@/lib/db';
 import { verifyAdmin } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { computeRewards, normalizePhone } from '@/lib/loyalty';
+import { computeSegment } from '@/lib/segments';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 
@@ -43,6 +44,11 @@ export default async function handler(req, res) {
     const hasMessenger = orders.some((o) => o.messenger_psid);
     const loyalty = computeRewards(orders);
 
+    const segment = computeSegment({
+      total_orders: orders.length,
+      total_spent: Math.round(totalSpent * 100) / 100,
+      last_order: latest.created_at,
+    });
     return res.status(200).json({
       customer_name: latest.customer_name,
       phone_normalized: phone,
@@ -52,6 +58,7 @@ export default async function handler(req, res) {
       first_order: orders[orders.length - 1].created_at,
       last_order: latest.created_at,
       has_messenger: hasMessenger,
+      segment,
       loyalty,
       orders,
       notes,
