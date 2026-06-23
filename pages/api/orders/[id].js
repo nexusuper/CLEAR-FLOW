@@ -5,6 +5,12 @@ import { normalizePhone } from '@/lib/loyalty';
 import { buildStatusMessage, NOTIFIABLE_STATUSES } from '@/lib/notifications';
 import { sendMessengerMessage } from '@/lib/facebook';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+
+const PatchSchema = z.object({
+  status: z.enum(['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled']).optional(),
+  payment_verified: z.boolean().optional(),
+});
 
 const readRate = rateLimit({ windowMs: 60_000, max: 30 });
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
@@ -58,13 +64,20 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { status, payment_verified } = req.body;
+    const parsed = PatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid update data' });
+    }
+    const { status, payment_verified } = parsed.data;
+
+    if (status === undefined && payment_verified === undefined) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
 
     // Payment verification toggle (independent of status)
     if (payment_verified !== undefined) {
-      if (typeof payment_verified !== 'boolean') {
-        return res.status(400).json({ error: 'payment_verified must be a boolean' });
-      }
+      const exists = await sql`SELECT id FROM orders WHERE id = ${id}`;
+      if (exists.length === 0) return res.status(404).json({ error: 'Order not found' });
       await sql`UPDATE orders SET payment_verified = ${payment_verified ? 1 : 0} WHERE id = ${id}`;
       if (status === undefined) {
         return res.status(200).json({ success: true });
@@ -72,11 +85,6 @@ export default async function handler(req, res) {
     }
 
     if (status !== undefined) {
-      const valid = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
-      if (!valid.includes(status)) {
-        return res.status(400).json({ error: 'Invalid status' });
-      }
-
       const rows = await sql`SELECT * FROM orders WHERE id = ${id}`;
       const order = rows[0];
       if (!order) return res.status(404).json({ error: 'Order not found' });
