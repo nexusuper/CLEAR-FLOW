@@ -4,17 +4,7 @@ import { verifyAdmin } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { normalizePhone } from '@/lib/loyalty';
-
-const MESSAGES = {
-  confirmed: (name, id) =>
-    `✅ Hi ${name}! Your Clear Flow water order (#${id}) has been confirmed and is being prepared.\n\nWe'll notify you when it's on the way! 💧`,
-  out_for_delivery: (name, id) =>
-    `🛵 Hi ${name}! Your Clear Flow water order (#${id}) is now OUT FOR DELIVERY!\n\nOur rider is heading to you. Please be available to receive it. Thank you! 💧`,
-  delivered: (name, id) =>
-    `🎉 Hi ${name}! Your Clear Flow water order (#${id}) has been delivered!\n\nThank you for choosing Clear Flow! Order again anytime at our website. 💧`,
-  cancelled: (name, id) =>
-    `❌ Hi ${name}, your Clear Flow water order (#${id}) has been cancelled.\n\nIf you have questions, please reply to this message or call us at 0912-345-6789.`,
-};
+import { buildStatusMessage } from '@/lib/notifications';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 20 });
 
@@ -31,7 +21,7 @@ export default async function handler(req, res) {
   if (!orderId || !status) {
     return res.status(400).json({ error: 'Missing orderId or status' });
   }
-  if (!MESSAGES[status]) {
+  if (!buildStatusMessage({ customer_name: 'x', id: 'x' }, status, 'messenger')) {
     return res.status(400).json({ error: 'No message template for this status' });
   }
 
@@ -51,7 +41,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const messageText = MESSAGES[status](order.customer_name, order.id);
+    const messageText = buildStatusMessage(order, status, 'messenger');
     await sendMessengerMessage(order.messenger_psid, messageText);
 
     const normPhone = normalizePhone(order.phone);
