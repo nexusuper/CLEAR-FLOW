@@ -169,6 +169,15 @@ export default function AdminPanel() {
     }
   }
 
+  async function togglePaymentVerified(id, verified) {
+    await fetch('/api/orders/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', password: savedPassword },
+      body: JSON.stringify({ payment_verified: verified }),
+    });
+    await fetchOrders();
+  }
+
   async function updateStatus(id, status) {
     setUpdating(id);
     await fetch('/api/orders/' + id, {
@@ -712,6 +721,19 @@ export default function AdminPanel() {
                           <td className="px-4 py-3">
                             <div className="uppercase text-xs font-semibold text-gray-600">{o.payment_method}</div>
                             {o.reference_number && <div className="text-gray-400 text-xs">Ref: {o.reference_number}</div>}
+                            {(o.payment_method === 'gcash' || o.payment_method === 'paymaya') && (
+                              <label className="flex items-center gap-1 mt-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!o.payment_verified}
+                                  onChange={(e) => togglePaymentVerified(o.id, e.target.checked)}
+                                  className="w-3.5 h-3.5 accent-green-500"
+                                />
+                                <span className={'text-[10px] font-semibold ' + (o.payment_verified ? 'text-green-600' : 'text-amber-600')}>
+                                  {o.payment_verified ? 'Verified' : 'Unverified'}
+                                </span>
+                              </label>
+                            )}
                           </td>
                           <td className="px-4 py-3 font-bold text-sky-600">
                             ₱{o.total_amount}
@@ -724,6 +746,11 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                             {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            {o.delivery_slot ? (
+                              <div className="text-[10px] font-semibold text-sky-600">
+                                {o.delivery_slot === 'am' ? 'AM' : 'PM'}{o.delivery_date ? ` · ${o.delivery_date}` : ''}
+                              </div>
+                            ) : null}
                           </td>
                           <td className="px-4 py-3">
                             <select
@@ -734,6 +761,9 @@ export default function AdminPanel() {
                             >
                               {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                             </select>
+                            {o.sms_pending ? (
+                              <div className="text-[10px] font-semibold text-amber-600 mt-1">SMS reminder pending</div>
+                            ) : null}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
