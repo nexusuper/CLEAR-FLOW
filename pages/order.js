@@ -23,6 +23,8 @@ export default function Order() {
     gcash_number: '',
     reference_number: '',
     notes: '',
+    delivery_slot: '',
+    delivery_date: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -143,6 +145,8 @@ export default function Order() {
           total_amount: baseTotal,
           reward_requested: rewardCount,
           reward_code: codeApplied ? codeInput : null,
+          delivery_slot: form.delivery_slot || null,
+          delivery_date: form.delivery_date || null,
         }),
       });
       const data = await res.json();
@@ -330,6 +334,30 @@ export default function Order() {
                 </div>
               </div>
             )}
+          </ClayCard>
+
+          {/* Delivery Time */}
+          <ClayCard className="p-6">
+            <h2 className="text-lg font-display font-semibold text-clay-ink2 mb-4">Preferred Delivery Time</h2>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { id: 'am', label: 'Morning', sub: '8AM–12PM' },
+                { id: 'pm', label: 'Afternoon', sub: '1PM–5PM' },
+              ].map((s) => (
+                <label key={s.id} className={`flex flex-col rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.delivery_slot === s.id ? 'clay-tile-selected' : ''}`}>
+                  <div className="flex items-center gap-2">
+                    <input type="radio" name="delivery_slot" value={s.id} checked={form.delivery_slot === s.id} onChange={() => set('delivery_slot', s.id)} className="accent-clay-sky" />
+                    <span className="font-semibold text-clay-ink">{s.label}</span>
+                  </div>
+                  <span className="text-xs text-clay-muted ml-6">{s.sub}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Delivery date</label>
+              <input type="date" value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
+              <p className="text-xs text-clay-muted mt-1">Leave blank for ASAP / today.</p>
+            </div>
           </ClayCard>
 
           {/* Notes */}

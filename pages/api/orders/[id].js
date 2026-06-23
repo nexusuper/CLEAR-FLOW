@@ -43,6 +43,8 @@ export default async function handler(req, res) {
           voucher_count: order.voucher_count,
           voucher_discount: order.voucher_discount,
           reward_requested: order.reward_requested,
+          delivery_slot: order.delivery_slot,
+          delivery_date: order.delivery_date,
         });
       }
     }

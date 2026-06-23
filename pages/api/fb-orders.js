@@ -26,6 +26,7 @@ const FbOrderSchema = z.object({
   barangay: z.string().max(200).optional(),
   product_type: z.string().max(50).optional(),
   notes: z.string().max(1000).optional(),
+  delivery_slot: z.enum(['am', 'pm']).optional(),
 });
 
 
@@ -97,7 +98,7 @@ export default async function handler(req, res) {
         payment_method, gcash_number, reference_number,
         notes, total_amount, created_at, messenger_psid,
         voucher_count, voucher_discount, reward_requested,
-        phone_normalized
+        phone_normalized, delivery_slot
       ) VALUES (
         ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
         ${productKey}, ${product.size}, ${quantity},
@@ -105,7 +106,7 @@ export default async function handler(req, res) {
         ${'cod'}, ${null}, ${null},
         ${notes}, ${total_amount}, ${created_at}, ${messenger_psid},
         ${0}, ${0}, ${0},
-        ${normalizePhone(phone)}
+        ${normalizePhone(phone)}, ${b.delivery_slot || null}
       )
     `;
   } catch (err) {

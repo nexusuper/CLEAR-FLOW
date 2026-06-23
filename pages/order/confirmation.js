@@ -98,6 +98,12 @@ export default function Confirmation() {
                   <span className="text-gray-500">Payment</span>
                   <span className="font-medium capitalize">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method}</span>
                 </div>
+                {order.delivery_slot && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Delivery Time</span>
+                    <span className="font-medium">{order.delivery_slot === 'am' ? 'Morning (8AM–12PM)' : 'Afternoon (1PM–5PM)'}{order.delivery_date ? ` · ${order.delivery_date}` : ''}</span>
+                  </div>
+                )}
                 <div className="flex justify-between border-t border-sky-50 pt-2">
                   <span className="text-gray-700 font-bold">Total</span>
                   <span className="text-sky-600 font-bold">₱{order.total_amount}</span>

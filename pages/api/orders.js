@@ -26,6 +26,8 @@ const OrderSchema = z.object({
   total_amount: z.coerce.number().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
   reward_code: z.string().max(10).optional().nullable(),
+  delivery_slot: z.enum(['am', 'pm']).optional().nullable(),
+  delivery_date: z.string().max(20).optional().nullable(),
 });
 
 export default async function handler(req, res) {
@@ -107,6 +109,7 @@ export default async function handler(req, res) {
       need_container, container_quantity,
       payment_method, gcash_number, reference_number,
       notes, total_amount, reward_requested, reward_code,
+      delivery_slot, delivery_date,
     } = parsed.data;
 
     const normPhone = normalizePhone(phone);
@@ -168,7 +171,7 @@ export default async function handler(req, res) {
           payment_method, gcash_number, reference_number,
           notes, total_amount, created_at,
           voucher_count, voucher_discount, reward_requested,
-          phone_normalized
+          phone_normalized, delivery_slot, delivery_date
         ) VALUES (
           ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
           ${product_type}, ${container_size}, ${quantity},
@@ -176,7 +179,7 @@ export default async function handler(req, res) {
           ${payment_method}, ${gn}, ${rn},
           ${nt}, ${finalTotal}, ${created_at},
           ${voucher_count}, ${voucher_discount}, ${reward_requested_store},
-          ${normPhone}
+          ${normPhone}, ${delivery_slot || null}, ${delivery_date || null}
         )
       `;
     } catch (err) {
