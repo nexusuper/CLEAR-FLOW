@@ -135,6 +135,11 @@ export default function AdminPanel() {
   const [messageResult, setMessageResult] = useState(null);
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagInputValue, setTagInputValue] = useState('');
+  const [route, setRoute] = useState(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [containerQty, setContainerQty] = useState(1);
+  const [containerReason, setContainerReason] = useState('');
+  const [savingContainer, setSavingContainer] = useState(false);
 
   function applyPageData(data) {
     setOrders(data.orders);
@@ -290,6 +295,35 @@ export default function AdminPanel() {
     }
   }
 
+  async function fetchRoute() {
+    setRouteLoading(true);
+    try {
+      const res = await fetch('/api/orders/route', { headers: { password: savedPassword } });
+      if (res.ok) setRoute(await res.json());
+    } catch (e) {
+      console.error('Failed to fetch route:', e);
+    }
+    setRouteLoading(false);
+  }
+
+  async function adjustContainers(sign) {
+    if (!selectedCustomer || !containerQty) return;
+    setSavingContainer(true);
+    try {
+      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/container-adjust`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ delta: sign * Math.abs(containerQty), reason: containerReason }),
+      });
+      setContainerReason('');
+      setContainerQty(1);
+      await fetchCustomerDetail(selectedCustomer.phone_normalized);
+    } catch (e) {
+      console.error('Failed to adjust containers:', e);
+    }
+    setSavingContainer(false);
+  }
+
   async function fetchCustomerDetail(phone) {
     setNewNote('');
     setNewTags('');
@@ -299,6 +333,8 @@ export default function AdminPanel() {
     setMessageResult(null);
     setShowTagInput(false);
     setTagInputValue('');
+    setContainerQty(1);
+    setContainerReason('');
     try {
       const res = await fetch(`/api/customers/${phone}`, { headers: { password: savedPassword } });
       if (res.ok) setSelectedCustomer(await res.json());
@@ -468,6 +504,10 @@ export default function AdminPanel() {
     }
   }, [activeTab, authed]);
 
+  useEffect(() => {
+    if (activeTab === 'route' && authed) fetchRoute();
+  }, [activeTab, authed]);
+
   const filtered = orders;
 
   const deletableInView = filtered.filter((o) => DELETABLE_STATUSES.includes(o.status));
@@ -500,7 +540,7 @@ export default function AdminPanel() {
             <div>
               <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
               <p className="text-sky-200 text-sm">
-                {activeTab === 'orders' ? `${totalOrders} total orders` : `${custTotal} customers`}
+                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : `${route?.total ?? 0} stops today`}
               </p>
             </div>
             <div className="flex gap-3">
@@ -527,6 +567,12 @@ export default function AdminPanel() {
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'customers' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
               <ClayIcon name="users" className="w-4 h-4 inline mr-1" /> Customers
+            </button>
+            <button
+              onClick={() => setActiveTab('route')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'route' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="truck" className="w-4 h-4 inline mr-1" /> Route
             </button>
           </div>
         </div>
@@ -674,7 +720,7 @@ export default function AdminPanel() {
                     </button>
                   )}
                 </div>
-                <div className="overflow-x-auto">
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
@@ -795,6 +841,28 @@ export default function AdminPanel() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="sm:hidden divide-y divide-gray-100">
+                  {filtered.map((o) => (
+                    <div key={o.id} className="p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-sky-600">{o.id}</span>
+                        <span className="font-bold text-sky-600">₱{o.total_amount}</span>
+                      </div>
+                      <div className="font-medium text-gray-800">{o.customer_name}</div>
+                      <div className="text-xs text-gray-400">{o.phone} · {o.barangay}</div>
+                      <div className="text-sm text-gray-600">{o.product_type} x{o.quantity}</div>
+                      <select
+                        value={o.status}
+                        disabled={updating === o.id}
+                        onChange={(e) => updateStatus(o.id, e.target.value)}
+                        className={'text-xs font-semibold px-2 py-1 rounded-full border-0 ' + STATUS_COLORS[o.status]}
+                      >
+                        {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                      {o.sms_pending ? <div className="text-[10px] font-semibold text-amber-600">SMS reminder pending</div> : null}
+                    </div>
+                  ))}
                 </div>
               </>
             )}
@@ -927,7 +995,7 @@ export default function AdminPanel() {
                 <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
                   <span className="text-xs text-gray-400">Showing {customers.length} of {custTotal} customers (page {custPage})</span>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
@@ -982,6 +1050,24 @@ export default function AdminPanel() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="sm:hidden divide-y divide-gray-100">
+                  {customers.map((c) => (
+                    <div key={c.phone_normalized} onClick={() => fetchCustomerDetail(c.phone_normalized)} className="p-4 space-y-1 cursor-pointer hover:bg-sky-50">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-800 flex items-center gap-1">
+                          {c.customer_name}
+                          {c.has_messenger && <ClayIcon name="chat" className="w-4 h-4 inline text-blue-500" />}
+                        </span>
+                        {c.segment && (() => {
+                          const def = SEGMENT_DEFS.find((s) => s.value === c.segment);
+                          return def ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`}>{def.label}</span> : null;
+                        })()}
+                      </div>
+                      <div className="text-xs text-gray-400 font-mono">{c.phone_display || c.phone_normalized}</div>
+                      <div className="text-xs text-gray-600">{c.total_orders} orders · ₱{c.total_spent}</div>
+                    </div>
+                  ))}
                 </div>
               </>
             )}
@@ -1126,6 +1212,46 @@ export default function AdminPanel() {
                       <div><span className="text-gray-400">Messenger:</span></div>
                       <div>{selectedCustomer.has_messenger ? <span className="text-blue-600 font-medium">Linked</span> : <span className="text-gray-400">Not linked</span>}</div>
                     </div>
+                  </div>
+
+                  {/* Containers Out */}
+                  <div className="clay-raised-sm rounded-2xl p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                      <ClayIcon name="jug" className="w-4 h-4 inline mr-1" /> Containers Out
+                    </h3>
+                    <div className="text-3xl font-bold text-sky-700 mb-3">{selectedCustomer.containers_out ?? 0}</div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={containerQty}
+                        onChange={(e) => setContainerQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="clay-input w-20 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={containerReason}
+                        onChange={(e) => setContainerReason(e.target.value)}
+                        placeholder="Reason (optional)"
+                        className="clay-input flex-1 text-sm"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => adjustContainers(1)} disabled={savingContainer} className="flex-1 clay-btn-primary clay-pressable rounded-full py-1.5 text-sm font-semibold disabled:opacity-50">+ Give</button>
+                      <button onClick={() => adjustContainers(-1)} disabled={savingContainer} className="flex-1 clay-btn-white clay-pressable rounded-full py-1.5 text-sm font-semibold disabled:opacity-50">− Collect</button>
+                    </div>
+                    {selectedCustomer.containerAdjustments && selectedCustomer.containerAdjustments.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {selectedCustomer.containerAdjustments.map((a) => (
+                          <div key={a.id} className="flex items-center justify-between text-xs clay-inset rounded-lg px-2 py-1">
+                            <span className={'font-semibold ' + (a.delta > 0 ? 'text-sky-600' : 'text-amber-600')}>{a.delta > 0 ? '+' : ''}{a.delta}</span>
+                            <span className="text-gray-500 flex-1 px-2 truncate">{a.reason || '—'}</span>
+                            <span className="text-gray-400">{new Date(a.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Notes Section */}
@@ -1329,6 +1455,54 @@ export default function AdminPanel() {
           )}
 
           </>)}
+
+          {/* ===== ROUTE TAB ===== */}
+          {activeTab === 'route' && (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-clay-ink">Today&apos;s Deliveries</h2>
+                <button onClick={fetchRoute} className="text-xs clay-raised-sm rounded-full px-3 py-1.5 font-semibold hover:bg-sky-50">
+                  <ClayIcon name="refresh" className="w-3.5 h-3.5 inline" /> Refresh
+                </button>
+              </div>
+              {routeLoading ? (
+                <p className="text-center py-12 text-gray-400">Loading route...</p>
+              ) : !route || route.total === 0 ? (
+                <p className="text-center py-12 text-gray-400">No deliveries scheduled for today.</p>
+              ) : (
+                route.barangays.map((grp) => (
+                  <div key={grp.barangay}>
+                    <h3 className="font-display font-bold text-clay-ink2 mb-2">{grp.barangay} ({grp.count})</h3>
+                    <div className="space-y-2">
+                      {grp.orders.map((o) => (
+                        <div key={o.id} className="clay-raised-sm rounded-2xl p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <div className="font-semibold text-clay-ink flex items-center gap-2">
+                                {o.customer_name}
+                                {o.delivery_slot && <span className="text-[10px] font-semibold text-sky-600">{o.delivery_slot === 'am' ? 'AM' : 'PM'}</span>}
+                              </div>
+                              <div className="text-sm text-gray-600">{o.address}</div>
+                              <div className="text-xs text-gray-400">{o.product_type} x{o.quantity}</div>
+                              <a href={`tel:${o.phone}`} className="text-xs text-clay-skydeep font-semibold mt-1 inline-flex items-center gap-1">
+                                <ClayIcon name="phone" className="w-3.5 h-3.5" /> {o.phone}
+                              </a>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              {o.status === 'confirmed' && (
+                                <button onClick={() => { updateStatus(o.id, 'out_for_delivery').then(fetchRoute); }} className="text-[11px] bg-orange-100 text-orange-700 font-semibold px-2 py-1 rounded-full">Out</button>
+                              )}
+                              <button onClick={() => { updateStatus(o.id, 'delivered').then(fetchRoute); }} className="text-[11px] bg-green-100 text-green-700 font-semibold px-2 py-1 rounded-full">Delivered</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
         </div>
       </div>
