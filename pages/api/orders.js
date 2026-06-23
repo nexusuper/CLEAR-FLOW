@@ -53,7 +53,8 @@ export default async function handler(req, res) {
       const validStatuses = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
       const hasStatus = validStatuses.includes(statusFilter);
       const hasSearch = search.length > 0;
-      const searchPattern = `%${search}%`;
+      const escSearch = search.replace(/[%_\\]/g, '\\$&');
+      const searchPattern = `%${escSearch}%`;
 
       const sortMap = {
         date_desc: sql`created_at DESC`,

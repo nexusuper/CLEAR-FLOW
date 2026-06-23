@@ -3,7 +3,7 @@ import { verifyAdmin } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { computeSegment, SEGMENT_VALUES } from '@/lib/segments';
 
-const adminRate = rateLimit({ windowMs: 60_000, max: 10 });
+const adminRate = rateLimit({ windowMs: 60_000, max: 3 });
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -29,9 +29,11 @@ export default async function handler(req, res) {
     const sortParam = req.query.sort || 'last_order_desc';
 
     const hasSearch = search.length > 0;
-    const searchPattern = `%${search}%`;
+    const escSearch = search.replace(/[%_\\]/g, '\\$&');
+    const searchPattern = `%${escSearch}%`;
     const hasTag = tagFilter.length > 0;
-    const tagPattern = `%${tagFilter}%`;
+    const escTag = tagFilter.replace(/[%_\\]/g, '\\$&');
+    const tagPattern = `%${escTag}%`;
     const hasSegment = segmentFilter.length > 0 && SEGMENT_VALUES.has(segmentFilter);
 
     const sortMap = {

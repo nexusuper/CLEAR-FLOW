@@ -33,9 +33,11 @@ export default async function handler(req, res) {
     const hasSegment = segmentFilter.length > 0 && SEGMENT_VALUES.has(segmentFilter);
 
     const hasSearch = search.length > 0;
-    const searchPattern = `%${search}%`;
+    const escSearch = search.replace(/[%_\\]/g, '\\$&');
+    const searchPattern = `%${escSearch}%`;
     const hasTag = tagFilter.length > 0;
-    const tagPattern = `%${tagFilter}%`;
+    const escTag = tagFilter.replace(/[%_\\]/g, '\\$&');
+    const tagPattern = `%${escTag}%`;
 
     // Neon tagged templates build ORDER BY with sql`` fragments
     const sortMap = {
