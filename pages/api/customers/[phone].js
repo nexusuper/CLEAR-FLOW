@@ -29,10 +29,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [orders, notes, contactLog] = await Promise.all([
+    const [orders, notes, contactLog, containerAdjustments] = await Promise.all([
       sql`SELECT * FROM orders WHERE phone_normalized = ${phone} ORDER BY created_at DESC`,
       sql`SELECT * FROM customer_notes WHERE phone_normalized = ${phone} ORDER BY updated_at DESC`,
       sql`SELECT * FROM contact_log WHERE phone_normalized = ${phone} ORDER BY created_at DESC LIMIT 50`,
+      sql`SELECT * FROM container_adjustments WHERE phone_normalized = ${phone} ORDER BY created_at DESC`,
     ]);
 
     if (orders.length === 0) {
@@ -49,6 +50,13 @@ export default async function handler(req, res) {
       total_spent: Math.round(totalSpent * 100) / 100,
       last_order: latest.created_at,
     });
+
+    const autoDerived = orders.reduce(
+      (sum, o) => sum + (o.status === 'delivered' && o.need_container ? (Number(o.container_quantity) || 0) : 0),
+      0
+    );
+    const manualSum = containerAdjustments.reduce((sum, a) => sum + (Number(a.delta) || 0), 0);
+    const containers_out = autoDerived + manualSum;
     return res.status(200).json({
       customer_name: latest.customer_name,
       phone_normalized: phone,
@@ -60,6 +68,8 @@ export default async function handler(req, res) {
       has_messenger: hasMessenger,
       segment,
       loyalty,
+      containers_out,
+      containerAdjustments,
       orders,
       notes,
       contactLog,
