@@ -140,6 +140,16 @@ export default function AdminPanel() {
   const [containerQty, setContainerQty] = useState(1);
   const [containerReason, setContainerReason] = useState('');
   const [savingContainer, setSavingContainer] = useState(false);
+  const [dashboard, setDashboard] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [inventory, setInventory] = useState(null);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [restockQty, setRestockQty] = useState({});
+  const [adjustDelta, setAdjustDelta] = useState({});
+  const [invSaving, setInvSaving] = useState(null);
+  const [reorders, setReorders] = useState(null);
+  const [nudging, setNudging] = useState(null);
+  const [showReorders, setShowReorders] = useState(false);
 
   function applyPageData(data) {
     setOrders(data.orders);
@@ -313,6 +323,98 @@ export default function AdminPanel() {
       body: JSON.stringify({ status }),
     });
     await fetchRoute();
+  }
+
+  async function fetchDashboard() {
+    setDashboardLoading(true);
+    try {
+      const res = await fetch('/api/dashboard', { headers: { password: savedPassword } });
+      if (res.ok) setDashboard(await res.json());
+    } catch (e) {
+      console.error('Failed to fetch dashboard:', e);
+    } finally {
+      setDashboardLoading(false);
+    }
+  }
+
+  async function fetchInventory() {
+    setInventoryLoading(true);
+    try {
+      const res = await fetch('/api/inventory', { headers: { password: savedPassword } });
+      if (res.ok) setInventory(await res.json());
+    } catch (e) {
+      console.error('Failed to fetch inventory:', e);
+    } finally {
+      setInventoryLoading(false);
+    }
+  }
+
+  async function restockProduct(productId) {
+    const qty = parseInt(restockQty[productId], 10);
+    if (!qty || qty < 1) return;
+    setInvSaving(productId + ':restock');
+    try {
+      const res = await fetch('/api/inventory/restock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ product_id: productId, quantity: qty }),
+      });
+      if (res.ok) {
+        setRestockQty((s) => ({ ...s, [productId]: '' }));
+        await fetchInventory();
+      }
+    } finally {
+      setInvSaving(null);
+    }
+  }
+
+  async function adjustProduct(productId) {
+    const delta = parseInt(adjustDelta[productId], 10);
+    if (!delta || delta === 0) return;
+    setInvSaving(productId + ':adjust');
+    try {
+      const res = await fetch('/api/inventory/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ product_id: productId, delta }),
+      });
+      if (res.ok) {
+        setAdjustDelta((s) => ({ ...s, [productId]: '' }));
+        await fetchInventory();
+      }
+    } finally {
+      setInvSaving(null);
+    }
+  }
+
+  async function fetchReorders() {
+    try {
+      const res = await fetch('/api/customers/reorders', { headers: { password: savedPassword } });
+      if (res.ok) setReorders(await res.json());
+    } catch (e) {
+      console.error('Failed to fetch reorders:', e);
+    }
+  }
+
+  async function nudgeReorder(c) {
+    setNudging(c.phone_normalized);
+    try {
+      const msg = `Hi ${c.customer_name}! 💧 It's been a while since your last Clear Flow water delivery. Ready for a refill? Reply here to place your order!`;
+      const res = await fetch(`/api/customers/${c.phone_normalized}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ message: msg }),
+      });
+      if (res.ok) {
+        setMessageResult({ ok: true, text: `Nudged ${c.customer_name}` });
+      } else {
+        setMessageResult({ ok: false, text: 'Failed to send nudge' });
+      }
+    } catch (e) {
+      setMessageResult({ ok: false, text: 'Failed to send nudge' });
+    } finally {
+      setNudging(null);
+    }
   }
 
   async function adjustContainers(sign) {
@@ -510,11 +612,20 @@ export default function AdminPanel() {
       if (customers.length === 0) fetchCustomers(1);
       fetchCustStats();
       fetchAllTags();
+      fetchReorders();
     }
   }, [activeTab, authed]);
 
   useEffect(() => {
     if (activeTab === 'route' && authed) fetchRoute();
+  }, [activeTab, authed]);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' && authed) fetchDashboard();
+  }, [activeTab, authed]);
+
+  useEffect(() => {
+    if (activeTab === 'inventory' && authed) fetchInventory();
   }, [activeTab, authed]);
 
   const filtered = orders;
@@ -549,7 +660,7 @@ export default function AdminPanel() {
             <div>
               <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
               <p className="text-sky-200 text-sm">
-                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : `${route?.total ?? 0} stops today`}
+                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? `${route?.total ?? 0} stops today` : activeTab === 'inventory' ? 'Stock levels' : 'Business overview'}
               </p>
             </div>
             <div className="flex gap-3">
@@ -564,7 +675,13 @@ export default function AdminPanel() {
               </button>
             </div>
           </div>
-          <div className="flex gap-1 px-6 pb-0">
+          <div className="flex gap-1 px-6 pb-0 flex-wrap">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'dashboard' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="bolt" className="w-4 h-4 inline mr-1" /> Dashboard
+            </button>
             <button
               onClick={() => setActiveTab('orders')}
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'orders' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
@@ -583,10 +700,115 @@ export default function AdminPanel() {
             >
               <ClayIcon name="truck" className="w-4 h-4 inline mr-1" /> Route
             </button>
+            <button
+              onClick={() => setActiveTab('inventory')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors relative ' + (activeTab === 'inventory' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="jug" className="w-4 h-4 inline mr-1" /> Inventory
+              {inventory?.low_stock_count > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full w-4 h-4">{inventory.low_stock_count}</span>
+              )}
+            </button>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 py-6">
+
+          {/* ===== DASHBOARD TAB ===== */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              {dashboardLoading && !dashboard && (
+                <p className="text-clay-ink/60 text-sm">Loading dashboard…</p>
+              )}
+              {dashboard && (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Revenue (This Month)', value: '₱' + dashboard.kpis.revenueThisMonth.toLocaleString() },
+                      { label: 'Orders (This Month)', value: dashboard.kpis.ordersThisMonth },
+                      { label: 'Active Customers (30d)', value: dashboard.kpis.activeCustomers30d },
+                      { label: 'Avg Order Value', value: '₱' + dashboard.kpis.avgOrderValue.toLocaleString() },
+                    ].map((k) => (
+                      <div key={k.label} className="clay-raised rounded-2xl p-4">
+                        <p className="text-xs text-clay-ink/60 font-medium">{k.label}</p>
+                        <p className="text-2xl font-bold text-sky-700 mt-1">{k.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="clay-raised rounded-2xl p-4">
+                    <p className="text-sm font-semibold text-clay-ink mb-3">Revenue — last 30 days</p>
+                    {(() => {
+                      const max = Math.max(1, ...dashboard.revenueSeries.map((d) => d.revenue));
+                      return (
+                        <div className="flex items-end gap-[2px] h-32">
+                          {dashboard.revenueSeries.map((d) => (
+                            <div
+                              key={d.date}
+                              title={`${d.date}: ₱${d.revenue.toLocaleString()} (${d.orders} orders)`}
+                              className="flex-1 bg-sky-400 hover:bg-sky-500 rounded-t transition-colors"
+                              style={{ height: `${Math.max(2, (d.revenue / max) * 100)}%` }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    <div className="flex justify-between text-[10px] text-clay-ink/50 mt-1">
+                      <span>{dashboard.revenueSeries[0]?.date}</span>
+                      <span>{dashboard.revenueSeries[dashboard.revenueSeries.length - 1]?.date}</span>
+                    </div>
+                  </div>
+
+                  <div className="clay-raised rounded-2xl p-4">
+                    <p className="text-sm font-semibold text-clay-ink mb-3">Orders by status</p>
+                    {(() => {
+                      const max = Math.max(1, ...dashboard.statusBreakdown.map((s) => s.count));
+                      return (
+                        <div className="space-y-2">
+                          {dashboard.statusBreakdown.map((s) => (
+                            <div key={s.status} className="flex items-center gap-2">
+                              <span className="w-32 text-xs capitalize text-clay-ink/70">{s.status.replace(/_/g, ' ')}</span>
+                              <div className="flex-1 bg-clay-inset rounded-full h-4 overflow-hidden">
+                                <div className="bg-sky-400 h-full rounded-full" style={{ width: `${(s.count / max) * 100}%` }} />
+                              </div>
+                              <span className="w-8 text-right text-xs font-semibold text-clay-ink">{s.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="clay-raised rounded-2xl p-4">
+                      <p className="text-sm font-semibold text-clay-ink mb-3">Top barangays</p>
+                      <ul className="space-y-1.5">
+                        {dashboard.topBarangays.map((b) => (
+                          <li key={b.barangay} className="flex justify-between text-sm">
+                            <span className="text-clay-ink/80">{b.barangay}</span>
+                            <span className="font-semibold text-sky-700">{b.count}</span>
+                          </li>
+                        ))}
+                        {dashboard.topBarangays.length === 0 && <li className="text-xs text-clay-ink/50">No data</li>}
+                      </ul>
+                    </div>
+                    <div className="clay-raised rounded-2xl p-4">
+                      <p className="text-sm font-semibold text-clay-ink mb-3">Top customers</p>
+                      <ul className="space-y-1.5">
+                        {dashboard.topCustomers.map((c) => (
+                          <li key={c.phone_display} className="flex justify-between text-sm">
+                            <span className="text-clay-ink/80 truncate mr-2">{c.customer_name}</span>
+                            <span className="font-semibold text-sky-700 whitespace-nowrap">₱{c.total_spent.toLocaleString()}</span>
+                          </li>
+                        ))}
+                        {dashboard.topCustomers.length === 0 && <li className="text-xs text-clay-ink/50">No data</li>}
+                      </ul>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* ===== ORDERS TAB ===== */}
           {activeTab === 'orders' && (<>
@@ -904,6 +1126,52 @@ export default function AdminPanel() {
 
           {/* ===== CUSTOMERS TAB ===== */}
           {activeTab === 'customers' && (<>
+
+          {/* Due for Reorder */}
+          {reorders && reorders.count > 0 && (
+            <div className="clay-raised rounded-2xl p-4 mb-4">
+              <button
+                onClick={() => setShowReorders((v) => !v)}
+                className="w-full flex items-center justify-between"
+              >
+                <span className="text-sm font-semibold text-clay-ink">
+                  🔔 Due for Reorder
+                  <span className="ml-2 text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full px-2 py-0.5">{reorders.count}</span>
+                </span>
+                <span className="text-xs text-clay-ink/50">{showReorders ? 'Hide' : 'Show'}</span>
+              </button>
+              {showReorders && (
+                <ul className="mt-3 space-y-2">
+                  {reorders.customers.map((c) => (
+                    <li key={c.phone_normalized} className="flex items-center justify-between gap-2 clay-inset rounded-xl px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-clay-ink truncate">{c.customer_name}</p>
+                        <p className="text-xs text-clay-ink/60">
+                          {Math.round(c.daysOverdue)}d overdue · every ~{Math.round(c.avgIntervalDays)}d
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={'text-[10px] font-bold rounded-full px-2 py-0.5 ' + (c.status === 'overdue' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-amber-900')}>
+                          {c.status}
+                        </span>
+                        {c.has_messenger ? (
+                          <button
+                            onClick={() => nudgeReorder(c)}
+                            disabled={nudging === c.phone_normalized}
+                            className="clay-btn-primary text-xs px-3 py-1 rounded-full disabled:opacity-50"
+                          >
+                            {nudging === c.phone_normalized ? '…' : 'Nudge'}
+                          </button>
+                        ) : (
+                          <a href={`tel:${c.phone_display}`} className="clay-btn-white text-xs px-3 py-1 rounded-full">Call</a>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* Customer Stats Dashboard */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -1511,6 +1779,88 @@ export default function AdminPanel() {
                     </div>
                   </div>
                 ))
+              )}
+            </div>
+          )}
+
+          {/* ===== INVENTORY TAB ===== */}
+          {activeTab === 'inventory' && (
+            <div className="space-y-6">
+              {inventoryLoading && !inventory && (
+                <p className="text-clay-ink/60 text-sm">Loading inventory…</p>
+              )}
+              {inventory && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {inventory.items.map((it) => (
+                      <div key={it.product_id} className="clay-raised rounded-2xl p-4">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold text-clay-ink">{it.name}</p>
+                          {it.low_stock && (
+                            <span className="text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full px-2 py-0.5">LOW</span>
+                          )}
+                        </div>
+                        <p className="text-3xl font-bold text-sky-700 mt-2">{it.current_stock}</p>
+                        <p className="text-xs text-clay-ink/50">in stock · alert at {it.low_stock_threshold}</p>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <input
+                            type="number" min="1" placeholder="Qty"
+                            value={restockQty[it.product_id] || ''}
+                            onChange={(e) => setRestockQty((s) => ({ ...s, [it.product_id]: e.target.value }))}
+                            className="clay-inset rounded-lg px-2 py-1 w-20 text-sm"
+                          />
+                          <button
+                            onClick={() => restockProduct(it.product_id)}
+                            disabled={invSaving === it.product_id + ':restock'}
+                            className="clay-btn-primary text-sm px-3 py-1 rounded-full disabled:opacity-50"
+                          >
+                            {invSaving === it.product_id + ':restock' ? '…' : 'Restock'}
+                          </button>
+                        </div>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            type="number" placeholder="+/−"
+                            value={adjustDelta[it.product_id] || ''}
+                            onChange={(e) => setAdjustDelta((s) => ({ ...s, [it.product_id]: e.target.value }))}
+                            className="clay-inset rounded-lg px-2 py-1 w-20 text-sm"
+                          />
+                          <button
+                            onClick={() => adjustProduct(it.product_id)}
+                            disabled={invSaving === it.product_id + ':adjust'}
+                            className="clay-btn-white text-sm px-3 py-1 rounded-full disabled:opacity-50"
+                          >
+                            {invSaving === it.product_id + ':adjust' ? '…' : 'Adjust'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="clay-raised rounded-2xl p-4">
+                    <p className="text-sm font-semibold text-clay-ink mb-3">Recent movements</p>
+                    {inventory.log.length === 0 ? (
+                      <p className="text-xs text-clay-ink/50">No movements yet</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {inventory.log.map((l) => (
+                          <li key={l.id} className="flex items-center justify-between text-sm border-b border-clay-ink/5 pb-1">
+                            <span className="text-clay-ink/70">
+                              <span className="capitalize font-medium">{l.type}</span>
+                              {' · '}{l.product_id}
+                              {l.order_id ? ` · #${l.order_id}` : ''}
+                              {l.reason ? ` · ${l.reason}` : ''}
+                            </span>
+                            <span className={'font-semibold ' + (l.delta < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                              {l.delta > 0 ? '+' : ''}{l.delta}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}

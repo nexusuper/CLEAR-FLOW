@@ -113,6 +113,34 @@ export default async function handler(req, res) {
         }
       }
 
+      // Inventory auto-deduct on delivery (idempotent via inventory_deducted flag)
+      if (status === 'delivered' && Number(order.inventory_deducted) === 0) {
+        try {
+          const qty = Number(order.quantity) || 0;
+          const pid = order.product_type;
+          if (qty > 0 && pid) {
+            const inv = await sql`SELECT product_id FROM inventory WHERE product_id = ${pid}`;
+            if (inv.length > 0) {
+              const nowIso = new Date().toISOString();
+              await sql`
+                UPDATE inventory
+                SET current_stock = current_stock - ${qty}, updated_at = ${nowIso}
+                WHERE product_id = ${pid}
+              `;
+              await sql`
+                INSERT INTO inventory_log (id, product_id, delta, type, reason, order_id, created_at)
+                VALUES (${uuidv4().slice(0, 8).toUpperCase()}, ${pid}, ${-qty}, 'sale', '', ${id}, ${nowIso})
+              `;
+              await sql`UPDATE orders SET inventory_deducted = 1 WHERE id = ${id}`;
+            } else {
+              console.error('Inventory deduct skipped: no inventory row for product', pid);
+            }
+          }
+        } catch (invErr) {
+          console.error('Inventory auto-deduct failed:', invErr);
+        }
+      }
+
       return res.status(200).json({ success: true });
     }
 
