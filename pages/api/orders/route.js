@@ -22,8 +22,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // Compute "today" in Philippine time (en-CA yields YYYY-MM-DD) so the
+    // route is correct even when the server runs in UTC (e.g. Vercel).
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 
     const rows = await sql`
       SELECT id, customer_name, phone, address, barangay,

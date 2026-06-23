@@ -306,6 +306,15 @@ export default function AdminPanel() {
     setRouteLoading(false);
   }
 
+  async function routeUpdateStatus(id, status) {
+    await fetch('/api/orders/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', password: savedPassword },
+      body: JSON.stringify({ status }),
+    });
+    await fetchRoute();
+  }
+
   async function adjustContainers(sign) {
     if (!selectedCustomer || !containerQty) return;
     setSavingContainer(true);
@@ -1490,9 +1499,11 @@ export default function AdminPanel() {
                             </div>
                             <div className="flex flex-col gap-1">
                               {o.status === 'confirmed' && (
-                                <button onClick={() => { updateStatus(o.id, 'out_for_delivery').then(fetchRoute); }} className="text-[11px] bg-orange-100 text-orange-700 font-semibold px-2 py-1 rounded-full">Out</button>
+                                <button onClick={() => routeUpdateStatus(o.id, 'out_for_delivery')} className="text-[11px] bg-orange-100 text-orange-700 font-semibold px-2 py-1 rounded-full">Out</button>
                               )}
-                              <button onClick={() => { updateStatus(o.id, 'delivered').then(fetchRoute); }} className="text-[11px] bg-green-100 text-green-700 font-semibold px-2 py-1 rounded-full">Delivered</button>
+                              {o.status === 'out_for_delivery' && (
+                                <button onClick={() => routeUpdateStatus(o.id, 'delivered')} className="text-[11px] bg-green-100 text-green-700 font-semibold px-2 py-1 rounded-full">Delivered</button>
+                              )}
                             </div>
                           </div>
                         </div>
