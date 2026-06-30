@@ -33,12 +33,12 @@ export default function Rewards() {
 
   return (
     <Layout title="My Rewards — Clear Flow">
-      <section className="px-4 pt-8">
-        <ClayCard className="max-w-lg mx-auto py-10 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
-          <ClayIcon name="party" className="w-10 h-10 mx-auto mb-2" />
-          <h1 className="text-3xl font-extrabold">My Rewards</h1>
-          <p className="text-sky-50 font-semibold mt-1">Earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} gallons.</p>
-        </ClayCard>
+      <section className="max-w-lg mx-auto px-4 pt-14 pb-4 reveal">
+        <span className="section-pill mb-5 inline-block">Loyalty Rewards</span>
+        <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
+          Earn free <span style={{ color: '#0ea5e9' }}>refills.</span>
+        </h1>
+        <p className="text-clay-muted font-semibold mt-3">Earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} gallons.</p>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
@@ -52,7 +52,7 @@ export default function Rewards() {
               className="clay-input flex-1"
             />
             <button type="submit" disabled={loading}
-                    className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-display font-semibold disabled:opacity-60">
+                    className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60">
               {loading ? '...' : 'Check'}
             </button>
           </div>
@@ -63,7 +63,7 @@ export default function Rewards() {
           <>
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted font-semibold mb-1">Free refills available</p>
-              <p className="font-display text-6xl font-bold text-clay-skydeep mb-1">{data.available}</p>
+              <p className="font-editorial text-6xl font-bold text-clay-skydeep mb-1">{data.available}</p>
               <p className="text-xs text-clay-muted">{data.deliveredGallons} gallons delivered all-time</p>
             </ClayCard>
 

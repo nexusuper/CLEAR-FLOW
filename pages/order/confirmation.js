@@ -47,12 +47,15 @@ export default function Confirmation() {
 
   return (
     <Layout title="Order Confirmed — Clear Flow">
-      <section className="px-4 pt-8">
-        <ClayCard className="max-w-lg mx-auto py-10 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
-          <ClayIcon name="check" className="w-12 h-12 mx-auto mb-2" />
-          <h1 className="text-3xl font-extrabold">Order Placed!</h1>
-          <p className="text-sky-50 font-semibold mt-1">We received your order and will process it shortly.</p>
-        </ClayCard>
+      <section className="max-w-lg mx-auto px-4 pt-14 pb-4 reveal">
+        <div className="mb-5 grid place-items-center w-14 h-14 rounded-[18px] clay-raised-sm" style={{ background: 'linear-gradient(145deg,#e9f6ff,#d3ecfb)' }}>
+          <ClayIcon name="check" className="w-7 h-7 text-clay-skydeep" />
+        </div>
+        <span className="section-pill mb-4 inline-block">Order Confirmed</span>
+        <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
+          Order Placed!
+        </h1>
+        <p className="text-clay-muted font-semibold mt-3">We received your order and will process it shortly.</p>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10">
@@ -68,7 +71,7 @@ export default function Confirmation() {
             </ClayCard>
 
             <ClayCard className="p-6">
-              <h2 className="font-display font-semibold text-clay-ink2 mb-3">Order Details</h2>
+              <h2 className="font-editorial font-semibold text-clay-ink2 mb-3">Order Details</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Status</span>

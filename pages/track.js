@@ -1,7 +1,6 @@
 import Layout from '@/components/Layout';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 
@@ -112,12 +111,12 @@ export default function Track() {
 
   return (
     <Layout title="Track Your Order — Clear Flow">
-      <section className="px-4 pt-8">
-        <ClayCard className="max-w-lg mx-auto py-10 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
-          <ClayIcon name="search" className="w-10 h-10 mx-auto mb-2" />
-          <h1 className="text-3xl font-extrabold">Track Your Order</h1>
-          <p className="text-sky-50 font-semibold mt-1">Enter your Order ID to see your delivery status.</p>
-        </ClayCard>
+      <section className="max-w-lg mx-auto px-4 pt-14 pb-4 reveal">
+        <span className="section-pill mb-5 inline-block">Order Tracking</span>
+        <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
+          Track your <span style={{ color: '#0ea5e9' }}>delivery.</span>
+        </h1>
+        <p className="text-clay-muted font-semibold mt-3">Enter your Order ID to see your delivery status.</p>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
@@ -135,7 +134,7 @@ export default function Track() {
             <button
               type="submit"
               disabled={loading}
-              className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-display font-semibold disabled:opacity-60"
+              className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60"
             >
               {loading ? '...' : 'Track'}
             </button>
