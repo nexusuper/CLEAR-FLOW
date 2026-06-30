@@ -3,7 +3,7 @@ import Script from 'next/script';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import MessengerButton from '@/components/MessengerButton';
-import { Fredoka, Nunito } from 'next/font/google';
+import { Fredoka, Nunito, Space_Grotesk } from 'next/font/google';
 
 const fredoka = Fredoka({
   subsets: ['latin'],
@@ -15,6 +15,13 @@ const nunito = Nunito({
   subsets: ['latin'],
   weight: ['400', '600', '700', '800'],
   variable: '--font-nunito',
+  display: 'swap',
+});
+// Bold grotesk for the Nova-style homepage redesign.
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-grotesk',
   display: 'swap',
 });
 
@@ -45,15 +52,30 @@ export default function App({ Component, pageProps }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Track page views on route change
     const handleRouteChange = () => pageview();
     router.events.on('routeChangeComplete', handleRouteChange);
     return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
 
+  // Scroll-reveal: add .is-visible to .reveal elements as they enter the viewport
+  useEffect(() => {
+    let obs;
+    const attach = () => {
+      obs = new IntersectionObserver(
+        (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add('is-visible'); }),
+        { threshold: 0.1 }
+      );
+      document.querySelectorAll('.reveal').forEach((el) => obs.observe(el));
+    };
+    attach();
+    const onRoute = () => { obs?.disconnect(); setTimeout(attach, 80); };
+    router.events.on('routeChangeComplete', onRoute);
+    return () => { obs?.disconnect(); router.events.off('routeChangeComplete', onRoute); };
+  }, [router.events]);
+
 
   return (
-    <div className={`${fredoka.variable} ${nunito.variable}`}>
+    <div className={`${fredoka.variable} ${nunito.variable} ${spaceGrotesk.variable}`}>
       {/* Meta Pixel */}
       {FB_PIXEL_ID && (
         <Script

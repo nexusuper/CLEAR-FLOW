@@ -4,6 +4,7 @@
   /* Typography */
   --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-fredoka), var(--font-nunito), sans-serif;
+  --font-editorial: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
 
   /* Clay palette (extends Tailwind's color utilities: bg-clay-bg, text-clay-ink, ...) */
   --color-clay-bg: #e3f1fb;
@@ -14,6 +15,8 @@
   --color-clay-sky: #38bdf8;
   --color-clay-skydeep: #0284c7;
   --color-clay-uv: #7c3aed;
+  --color-clay-danger: #dc2626;
+  --color-clay-danger-bg: #fef2f2;
 }
 
 body {
@@ -156,3 +159,64 @@ h1, h2, h3, .font-display {
   .hero-droplet, .hero-ripple { opacity: 0; }
   .purify-bottlefill { animation: none; height: 80%; }
 }
+
+/* ---------- Inline loading spinner (used by ClayButton) ---------- */
+.clay-spinner {
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 9999px;
+  border: 2.5px solid currentColor;
+  border-top-color: transparent;
+  animation: clay-spin 0.7s linear infinite;
+}
+@keyframes clay-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .clay-spinner { animation-duration: 1.4s; }
+}
+
+/* ---------- Frosted-glass nav ---------- */
+.nav-glass {
+  background: rgba(242, 250, 255, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+}
+
+/* ---------- Section pill badge ---------- */
+.section-pill {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(56, 189, 248, 0.10);
+  color: #0369a1;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 9999px;
+  padding: 0.25rem 0.875rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---------- Dark section ---------- */
+.clay-dark {
+  background: #0a1929;
+}
+
+/* ---------- Scroll reveal ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.reveal-d1 { transition-delay: 0.1s; }
+.reveal-d2 { transition-delay: 0.2s; }
+.reveal-d3 { transition-delay: 0.3s; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
