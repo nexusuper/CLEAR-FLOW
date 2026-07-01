@@ -1,6 +1,6 @@
 import { initDb } from '@/lib/db';
 import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
-import { verifyAdmin } from '@/lib/auth';
+import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 20 });
@@ -10,9 +10,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   if (!checkRate(req, res)) return;
-  if (!verifyAdmin(req)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (!await verifyAdminWithLockout(req, res)) return;
 
   let sql;
   try {

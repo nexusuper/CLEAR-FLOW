@@ -1,5 +1,5 @@
 import { initDb } from '@/lib/db';
-import { verifyAdmin } from '@/lib/auth';
+import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { computeSegment } from '@/lib/segments';
 
@@ -10,9 +10,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   if (!adminRate(req, res)) return;
-  if (!verifyAdmin(req)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (!await verifyAdminWithLockout(req, res)) return;
 
   let sql;
   try {

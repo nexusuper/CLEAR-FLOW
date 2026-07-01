@@ -75,11 +75,11 @@ export default async function handler(req, res) {
     for (const entry of body.entry || []) {
       for (const event of entry.messaging || []) {
         const senderPsid = event.sender?.id;
-        
+
         if (event.message?.text) {
           await handleMessage(senderPsid, event.message.text);
         }
-        
+
         if (event.postback?.payload) {
           await handlePostback(senderPsid, event.postback.payload);
         }
@@ -94,29 +94,20 @@ export default async function handler(req, res) {
 }
 
 async function handleMessage(senderPsid, messageText) {
-  const text = messageText.toLowerCase().trim();
-  
-  // Check if it's an order ID (8 character format)
+  const text = messageText.trim();
+
+  // Only Order ID linkage is supported (8-char alphanumeric)
   const orderIdMatch = text.match(/^[a-z0-9]{8}$/i);
   if (orderIdMatch) {
     await linkPsidToOrder(senderPsid, orderIdMatch[0].toUpperCase());
     return;
   }
 
-  // Check for phone number
-  const phoneMatch = text.match(/09\d{9}/);
-  if (phoneMatch) {
-    await linkPsidToPhone(senderPsid, phoneMatch[0]);
-    return;
-  }
-
-  // Send greeting/instructions
-  await sendReply(senderPsid, 
+  // Fallback: guide customer to use their Order ID
+  await sendReply(senderPsid,
     `👋 Hi! I'm the Clear Flow assistant.\n\n` +
-    `To receive order updates via Messenger, please send me:\n` +
-    `• Your Order ID (e.g., A1B2C3D4), or\n` +
-    `• Your phone number (e.g., 09123456789)\n\n` +
-    `You can also visit our website to place a new order! 💧`
+    `To receive order updates here, send me your Order ID (e.g., A1B2C3D4).\n\n` +
+    `You can find your Order ID on your order confirmation page, or look it up at our website using your phone number. 💧`
   );
 }
 
@@ -125,7 +116,7 @@ async function handlePostback(senderPsid, payload) {
     await sendReply(senderPsid,
       `👋 Welcome to Clear Flow!\n\n` +
       `We deliver fresh purified water right to your door.\n\n` +
-      `To link your account for order notifications, send me your Order ID or phone number.\n\n` +
+      `To get order updates here, send me your Order ID (e.g., A1B2C3D4). You can find it on your confirmation page after placing an order.\n\n` +
       `Questions? Just type your message and we'll get back to you! 💧`
     );
   }
@@ -134,7 +125,7 @@ async function handlePostback(senderPsid, payload) {
 async function linkPsidToOrder(senderPsid, orderId) {
   try {
     const sql = await initDb();
-    
+
     const result = await sql`
       UPDATE orders
       SET messenger_psid = ${senderPsid}
@@ -152,55 +143,12 @@ async function linkPsidToOrder(senderPsid, orderId) {
     } else {
       await sendReply(senderPsid,
         `❌ Sorry, I couldn't find order #${orderId}.\n\n` +
-        `Please check the Order ID and try again, or send your phone number instead.`
+        `Please double-check the Order ID from your confirmation page and try again.`
       );
     }
   } catch (error) {
     console.error('Error linking PSID to order:', error);
   }
-}
-
-async function linkPsidToPhone(senderPsid, phone) {
-  try {
-    const sql = await initDb();
-    
-    const result = await sql`
-      UPDATE orders
-      SET messenger_psid = ${senderPsid}
-      WHERE (phone = ${phone} OR phone = ${formatPhone(phone)})
-        AND messenger_psid IS NULL
-      RETURNING id, customer_name, status
-    `;
-
-    if (result.length > 0) {
-      const order = result[0];
-      await sendReply(senderPsid,
-        `✅ Linked! Hi ${order.customer_name}!\n\n` +
-        `Found ${result.length} order(s) with this phone number.\n` +
-        `Latest order #${order.id}: ${formatStatus(order.status)}\n\n` +
-        `You'll receive updates here for all future orders! 📱`
-      );
-    } else {
-      await sendReply(senderPsid,
-        `🔔 Got it! I've saved your number.\n\n` +
-        `When you place an order with ${phone}, you'll automatically receive updates here!\n\n` +
-        `Visit our website to place an order 💧`
-      );
-      
-      // Store for future orders (using a separate table or cache)
-      // For now, we just inform them
-    }
-  } catch (error) {
-    console.error('Error linking PSID to phone:', error);
-  }
-}
-
-function formatPhone(phone) {
-  // Convert 09123456789 to 0912-345-6789 format if needed
-  if (phone.length === 11 && phone.startsWith('09')) {
-    return `${phone.slice(0, 4)}-${phone.slice(4, 7)}-${phone.slice(7)}`;
-  }
-  return phone;
 }
 
 function formatStatus(status) {

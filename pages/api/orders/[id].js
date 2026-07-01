@@ -1,5 +1,5 @@
 import { initDb } from '@/lib/db';
-import { verifyAdmin, verifyAdminWithLockout } from '@/lib/auth';
+import { verifyAdminSoftLockout, verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { normalizePhone } from '@/lib/loyalty';
 import { deductInventoryForSale } from '@/lib/inventory';
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const order = rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (!verifyAdmin(req)) {
+    if (!await verifyAdminSoftLockout(req)) {
       const phone = normalizePhone(req.query.phone);
       const orderPhone = normalizePhone(order.phone);
       if (!phone || phone !== orderPhone) {
