@@ -1,5 +1,5 @@
 import { initDb } from '@/lib/db';
-import { verifyAdmin } from '@/lib/auth';
+import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 10 });
@@ -8,9 +8,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!checkRate(req, res)) return;
 
-  if (!verifyAdmin(req)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (!await verifyAdminWithLockout(req, res)) return;
 
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0 || ids.length > 100) {

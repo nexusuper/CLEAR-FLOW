@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "remotion": "remotion studio remotion/index.ts",
+    "render:video": "remotion render remotion/index.ts WaterRefillProcess public/purify-process.mp4 --codec=h264",
+    "render:poster": "remotion still remotion/index.ts Poster public/purify-process-poster.jpg --image-format=jpeg"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -17,9 +20,12 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.484",
+    "@remotion/google-fonts": "^4.0.484",
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
+    "remotion": "^4.0.484",
     "tailwindcss": "^4"
   }
 }

@@ -1,7 +1,8 @@
 import { initDb } from '@/lib/db';
-import { verifyAdmin } from '@/lib/auth';
+import { verifyAdmin, verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { normalizePhone } from '@/lib/loyalty';
+import { deductInventoryForSale } from '@/lib/inventory';
 import { buildStatusMessage, NOTIFIABLE_STATUSES } from '@/lib/notifications';
 import { sendMessengerMessage } from '@/lib/facebook';
 import { v4 as uuidv4 } from 'uuid';
@@ -37,6 +38,7 @@ export default async function handler(req, res) {
       const phone = normalizePhone(req.query.phone);
       const orderPhone = normalizePhone(order.phone);
       if (!phone || phone !== orderPhone) {
+        // Public view: status tracking only
         return res.status(200).json({
           id: order.id,
           status: order.status,
@@ -53,6 +55,30 @@ export default async function handler(req, res) {
           delivery_date: order.delivery_date,
         });
       }
+      // Phone-verified customer view: safe fields only — never expose payment/internal fields
+      return res.status(200).json({
+        id: order.id,
+        status: order.status,
+        created_at: order.created_at,
+        product_type: order.product_type,
+        container_size: order.container_size,
+        quantity: order.quantity,
+        total_amount: order.total_amount,
+        customer_name: order.customer_name,
+        phone: order.phone,
+        address: order.address,
+        barangay: order.barangay,
+        notes: order.notes,
+        payment_method: order.payment_method,
+        need_container: order.need_container,
+        container_quantity: order.container_quantity,
+        voucher_count: order.voucher_count,
+        voucher_discount: order.voucher_discount,
+        reward_requested: order.reward_requested,
+        delivery_slot: order.delivery_slot,
+        delivery_date: order.delivery_date,
+        payment_verified: order.payment_verified,
+      });
     }
 
     return res.status(200).json(order);
@@ -60,9 +86,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     if (!adminRate(req, res)) return;
-    if (!verifyAdmin(req)) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    if (!await verifyAdminWithLockout(req, res)) return;
 
     const parsed = PatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -116,25 +140,13 @@ export default async function handler(req, res) {
       // Inventory auto-deduct on delivery (idempotent via inventory_deducted flag)
       if (status === 'delivered' && Number(order.inventory_deducted) === 0) {
         try {
-          const qty = Number(order.quantity) || 0;
-          const pid = order.product_type;
-          if (qty > 0 && pid) {
-            const inv = await sql`SELECT product_id FROM inventory WHERE product_id = ${pid}`;
-            if (inv.length > 0) {
-              const nowIso = new Date().toISOString();
-              await sql`
-                UPDATE inventory
-                SET current_stock = current_stock - ${qty}, updated_at = ${nowIso}
-                WHERE product_id = ${pid}
-              `;
-              await sql`
-                INSERT INTO inventory_log (id, product_id, delta, type, reason, order_id, created_at)
-                VALUES (${uuidv4().slice(0, 8).toUpperCase()}, ${pid}, ${-qty}, 'sale', '', ${id}, ${nowIso})
-              `;
-              await sql`UPDATE orders SET inventory_deducted = 1 WHERE id = ${id}`;
-            } else {
-              console.error('Inventory deduct skipped: no inventory row for product', pid);
-            }
+          const deducted = await deductInventoryForSale(sql, {
+            product_id: order.product_type,
+            qty: Number(order.quantity) || 0,
+            order_id: id,
+          });
+          if (deducted) {
+            await sql`UPDATE orders SET inventory_deducted = 1 WHERE id = ${id}`;
           }
         } catch (invErr) {
           console.error('Inventory auto-deduct failed:', invErr);
@@ -149,9 +161,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     if (!adminRate(req, res)) return;
-    if (!verifyAdmin(req)) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    if (!await verifyAdminWithLockout(req, res)) return;
     const rows = await sql`SELECT status FROM orders WHERE id = ${id}`;
     const order = rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });

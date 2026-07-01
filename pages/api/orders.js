@@ -2,8 +2,9 @@ import { initDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
 import { hashCode } from '@/lib/reward-codes';
-import { verifyAdmin, timingSafeEqual } from '@/lib/auth';
+import { verifyAdmin, verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
 import { z } from 'zod';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
@@ -41,9 +42,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     if (!adminRate(req, res)) return;
-    if (!verifyAdmin(req)) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    if (!await verifyAdminWithLockout(req, res)) return;
     try {
       const page = Math.max(1, parseInt(req.query.page) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
@@ -105,12 +104,23 @@ export default async function handler(req, res) {
     }
     const {
       customer_name, phone, address, barangay,
-      product_type, container_size, quantity,
+      product_type, quantity,
       need_container, container_quantity,
       payment_method, gcash_number, reference_number,
-      notes, total_amount, reward_requested, reward_code,
+      notes, reward_requested, reward_code,
       delivery_slot, delivery_date,
     } = parsed.data;
+
+    // Price is computed server-side from the catalog — never trust the client's
+    // total_amount or container_size (prevents price tampering).
+    const product = PRODUCTS_BY_ID[product_type];
+    if (!product) {
+      return res.status(400).json({ error: 'Unknown product' });
+    }
+    const containerSize = product.size;
+    const refillSubtotal = product.refill * quantity;
+    const containerSubtotal = need_container ? product.container * (container_quantity || 0) : 0;
+    const computedBase = refillSubtotal + containerSubtotal + deliveryFee(quantity);
 
     const normPhone = normalizePhone(phone);
     let available = 0;
@@ -152,7 +162,7 @@ export default async function handler(req, res) {
       reward_requested_store = requested;
     }
     const voucher_discount = voucher_count * VOUCHER_VALUE;
-    const finalTotal = Math.max(0, (Number(total_amount) || 0) - voucher_discount);
+    const finalTotal = Math.max(0, computedBase - voucher_discount);
 
     const id = uuidv4().slice(0, 8).toUpperCase();
     const created_at = new Date().toISOString();
@@ -174,7 +184,7 @@ export default async function handler(req, res) {
           phone_normalized, delivery_slot, delivery_date
         ) VALUES (
           ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
-          ${product_type}, ${container_size}, ${quantity},
+          ${product_type}, ${containerSize}, ${quantity},
           ${nc}, ${cq},
           ${payment_method}, ${gn}, ${rn},
           ${nt}, ${finalTotal}, ${created_at},

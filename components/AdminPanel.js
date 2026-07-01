@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import ClayIcon from './ui/ClayIcon';
+import POSPanel from './admin/POSPanel';
 import { SEGMENT_DEFS } from '@/lib/segments';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
@@ -660,7 +661,7 @@ export default function AdminPanel() {
             <div>
               <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
               <p className="text-sky-200 text-sm">
-                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? `${route?.total ?? 0} stops today` : activeTab === 'inventory' ? 'Stock levels' : 'Business overview'}
+                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? `${route?.total ?? 0} stops today` : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : 'Business overview'}
               </p>
             </div>
             <div className="flex gap-3">
@@ -708,6 +709,12 @@ export default function AdminPanel() {
               {inventory?.low_stock_count > 0 && (
                 <span className="ml-1.5 inline-flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full w-4 h-4">{inventory.low_stock_count}</span>
               )}
+            </button>
+            <button
+              onClick={() => setActiveTab('pos')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'pos' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="cash" className="w-4 h-4 inline mr-1" /> POS
             </button>
           </div>
         </div>
@@ -984,6 +991,9 @@ export default function AdminPanel() {
                             <div className="font-medium text-gray-800 flex items-center gap-1">
                               {o.customer_name}
                               {o.messenger_psid && <ClayIcon name="chat" title="Messenger linked" className="w-4 h-4 inline text-blue-500" />}
+                              {o.sale_channel === 'pos' && (
+                                <span className="text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">Counter Sale</span>
+                              )}
                             </div>
                             <div className="text-gray-400 text-xs">{o.phone}</div>
                           </td>
@@ -1080,7 +1090,12 @@ export default function AdminPanel() {
                         <span className="font-mono font-bold text-sky-600">{o.id}</span>
                         <span className="font-bold text-sky-600">₱{o.total_amount}</span>
                       </div>
-                      <div className="font-medium text-gray-800">{o.customer_name}</div>
+                      <div className="font-medium text-gray-800 flex items-center gap-1">
+                        {o.customer_name}
+                        {o.sale_channel === 'pos' && (
+                          <span className="text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">Counter Sale</span>
+                        )}
+                      </div>
                       <div className="text-xs text-gray-400">{o.phone} · {o.barangay}</div>
                       <div className="text-sm text-gray-600">{o.product_type} x{o.quantity}</div>
                       <select
@@ -1863,6 +1878,11 @@ export default function AdminPanel() {
                 </>
               )}
             </div>
+          )}
+
+          {/* ===== POS TAB ===== */}
+          {activeTab === 'pos' && (
+            <POSPanel savedPassword={savedPassword} onSaleComplete={() => { fetchOrders(); }} />
           )}
 
         </div>

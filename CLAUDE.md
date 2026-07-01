@@ -12,6 +12,13 @@ npm run build    # Production build
 npm run lint     # ESLint
 ```
 
+Remotion (video asset pipeline):
+```bash
+npm run remotion        # Open Remotion Studio (interactive preview)
+npm run render:video    # Render public/purify-process.mp4
+npm run render:poster   # Render public/purify-process-poster.jpg
+```
+
 No test framework is configured.
 
 ## Architecture
@@ -40,7 +47,7 @@ No test framework is configured.
 
 ### API routes (`pages/api/`)
 
-All API routes follow the same pattern: `initDb()` → rate limit check → admin auth check (where applicable) → Zod validation → raw SQL via Neon's tagged-template `sql` function.
+Public routes follow: `initDb()` → rate limit → Zod validation → SQL. Admin routes use `await verifyAdminWithLockout(req, res)` (async, calls `initDb()` internally) instead of the bare `verifyAdmin` — the pattern differs slightly from public routes.
 
 - `orders.js` — CRUD for orders (GET lists for admin, POST creates)
 - `orders/[id].js` — single order read/update/delete
@@ -60,7 +67,7 @@ All API routes follow the same pattern: `initDb()` → rate limit check → admi
 ### Key libs (`lib/`)
 
 - `db.js` — Neon connection singleton + `initDb()` which creates tables and runs migrations inline (no migration tool)
-- `auth.js` — timing-safe admin password comparison via `password` header
+- `auth.js` — timing-safe admin password comparison (`verifyAdmin`) + `verifyAdminWithLockout(req, res)` which adds DB-backed IP lockout (5 failures → 15-min block, clears on success). Use `verifyAdminWithLockout` on all new admin routes.
 - `loyalty.js` — pure loyalty math (gallon counting, voucher computation) — isomorphic, safe for client import
 - `reward-codes.js` — server-only OTP generation and hashing
 - `facebook.js` — Messenger Send API helpers + webhook signature verification
@@ -81,7 +88,7 @@ Admin endpoints are protected by `verifyAdmin(req)` which compares `req.headers[
 
 ### Database
 
-Schema is created and migrated via `initDb()` in `lib/db.js` (runs on first API call). Tables: `orders`, `reward_codes`, `customer_notes`, `contact_log`. Phone numbers are normalized (digits only) and indexed as `phone_normalized`.
+Schema is created and migrated via `initDb()` in `lib/db.js` (runs on first API call). Tables: `orders`, `reward_codes`, `customer_notes`, `contact_log`, `container_adjustments`, `inventory`, `inventory_log`, `auth_failures`. Phone numbers are normalized (digits only) and indexed as `phone_normalized`.
 
 ### Environment variables
 
@@ -91,6 +98,10 @@ See `.env.example` for all required vars. Key ones:
 - `FB_PAGE_ACCESS_TOKEN` / `FB_VERIFY_TOKEN` / `FB_APP_SECRET` — Messenger integration
 - `FB_WEBHOOK_SECRET` — ManyChat order intake webhook secret
 - `NEXT_PUBLIC_FB_PIXEL_ID` / `NEXT_PUBLIC_FB_PAGE_ID` — client-side Facebook integration
+
+### Remotion video assets
+
+The purification process animation (`public/purify-process.mp4` + `public/purify-process-poster.jpg`) is rendered from `remotion/index.ts`. Edit the composition there and re-run `npm run render:video` to update the asset. `components/PurifyVideo.js` plays it as a muted, looped, motion-safe native `<video>`.
 
 ### Currency
 

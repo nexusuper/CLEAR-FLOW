@@ -33,8 +33,15 @@ export default function ClayButton({
     );
   }
   return (
-    <button className={classes} disabled={disabled || loading} {...rest}>
-      {loading ? 'Please wait…' : children}
+    <button className={classes} disabled={disabled || loading} aria-busy={loading || undefined} {...rest}>
+      {loading ? (
+        <>
+          <span className="clay-spinner" aria-hidden="true" />
+          Please wait…
+        </>
+      ) : (
+        children
+      )}
     </button>
   );
 }
