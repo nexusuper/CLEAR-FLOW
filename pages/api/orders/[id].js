@@ -38,7 +38,8 @@ export default async function handler(req, res) {
       const phone = normalizePhone(req.query.phone);
       const orderPhone = normalizePhone(order.phone);
       if (!phone || phone !== orderPhone) {
-        // Public view: status tracking only
+        // Public view: status tracking only — first name only, not full name,
+        // since anyone with the order ID (guessable-ish 8-char code) can hit this.
         return res.status(200).json({
           id: order.id,
           status: order.status,
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
           container_size: order.container_size,
           quantity: order.quantity,
           total_amount: order.total_amount,
-          customer_name: order.customer_name,
+          customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,
           voucher_count: order.voucher_count,
           voucher_discount: order.voucher_discount,
           reward_requested: order.reward_requested,

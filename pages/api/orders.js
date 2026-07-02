@@ -1,7 +1,7 @@
 import { initDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
-import { hashCode } from '@/lib/reward-codes';
+import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdmin, verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
@@ -140,19 +140,28 @@ export default async function handler(req, res) {
     let reward_requested_store = 0;
     if (requested > 0 && reward_code) {
       try {
+        // Mirror verify-code.js: only the single latest unused code counts, and
+        // attempts are capped — otherwise reward_code could be brute-forced via
+        // repeated order submissions without ever tripping CODE_MAX_ATTEMPTS.
         const codeRows = await sql`
-          SELECT id, code_hash, expires_at, used FROM reward_codes
+          SELECT id, code_hash, expires_at, used, attempts FROM reward_codes
           WHERE phone = ${normPhone} AND used = 0
-          ORDER BY created_at DESC LIMIT 5
+          ORDER BY created_at DESC LIMIT 1
         `;
+        const row = codeRows[0];
         const nowIso = new Date().toISOString();
-        const match = codeRows.find(
-          (r) => r.expires_at > nowIso && timingSafeEqual(r.code_hash, hashCode(normPhone, String(reward_code)))
-        );
-        if (match) {
-          await sql`UPDATE reward_codes SET used = 1 WHERE id = ${match.id}`;
-          voucher_count = Math.min(requested, available);
+        if (row && row.expires_at > nowIso && row.attempts < CODE_MAX_ATTEMPTS) {
+          if (timingSafeEqual(row.code_hash, hashCode(normPhone, String(reward_code)))) {
+            await sql`UPDATE reward_codes SET used = 1 WHERE id = ${row.id}`;
+            voucher_count = Math.min(requested, available);
+          } else {
+            await sql`UPDATE reward_codes SET attempts = attempts + 1 WHERE id = ${row.id}`;
+            reward_requested_store = requested;
+          }
         } else {
+          if (row && row.attempts >= CODE_MAX_ATTEMPTS) {
+            await sql`UPDATE reward_codes SET used = 1 WHERE id = ${row.id}`;
+          }
           reward_requested_store = requested;
         }
       } catch (e) {

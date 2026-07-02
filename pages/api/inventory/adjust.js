@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     if (threshold !== undefined) {
       const updated = await sql`
         UPDATE inventory
-        SET current_stock = current_stock + ${delta}, low_stock_threshold = ${threshold}, updated_at = ${now}
+        SET current_stock = GREATEST(0, current_stock + ${delta}), low_stock_threshold = ${threshold}, updated_at = ${now}
         WHERE product_id = ${product_id}
         RETURNING current_stock
       `;
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     } else {
       const updated = await sql`
         UPDATE inventory
-        SET current_stock = current_stock + ${delta}, updated_at = ${now}
+        SET current_stock = GREATEST(0, current_stock + ${delta}), updated_at = ${now}
         WHERE product_id = ${product_id}
         RETURNING current_stock
       `;

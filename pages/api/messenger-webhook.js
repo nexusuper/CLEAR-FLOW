@@ -126,10 +126,15 @@ async function linkPsidToOrder(senderPsid, orderId) {
   try {
     const sql = await initDb();
 
+    // Only orders still in-flight and created recently can be linked — closes
+    // the window where a stale/completed order ID (e.g. from an old screenshot)
+    // could be used by a stranger to bind their Messenger to someone else's order.
     const result = await sql`
       UPDATE orders
       SET messenger_psid = ${senderPsid}
       WHERE id = ${orderId} AND messenger_psid IS NULL
+        AND status NOT IN ('delivered', 'cancelled')
+        AND created_at > ${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()}
       RETURNING customer_name, status
     `;
 
