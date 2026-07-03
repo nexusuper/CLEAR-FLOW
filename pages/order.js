@@ -5,6 +5,11 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { PRODUCTS, deliveryFee } from '@/lib/products';
+import {
+  classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule,
+  PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
+  DELIVERY_ONLY_START, DELIVERY_ONLY_END,
+} from '@/lib/scheduling';
 
 // Downscales/compresses a photo before storing it as a data URL, so payment
 // screenshots (often multi-MB phone photos) stay small enough for a text column.
@@ -48,8 +53,11 @@ export default function Order() {
     reference_number: '',
     payment_screenshot: '',
     notes: '',
-    delivery_slot: '',
+    has_empty_containers: false,
+    pickup_date: '',
+    pickup_time: '',
     delivery_date: '',
+    delivery_time: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -94,7 +102,7 @@ export default function Order() {
   const selectedProduct = PRODUCTS.find((p) => p.id === form.product_type) || PRODUCTS[0];
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
-  const delivery = form.delivery_slot === 'pickup' ? 0 : deliveryFee(form.quantity);
+  const delivery = deliveryFee(form.quantity);
   const baseTotal = refillTotal + containerTotal + delivery;
   const maxVouchers = maxRedeemable({
     available: rewards ? rewards.available : 0,
@@ -106,6 +114,28 @@ export default function Order() {
   const grandTotal = Math.max(0, baseTotal - voucherDiscount);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+
+  const today = new Date().toISOString().slice(0, 10);
+  const pickupSlot = classifyPickupTime(form.pickup_time);
+  const showAfternoonNotice = form.has_empty_containers && pickupSlot === 'afternoon';
+  const allowedDelivery = form.has_empty_containers
+    ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time })
+    : null;
+  const scheduleCheck = validateSchedule({
+    hasEmptyContainers: form.has_empty_containers,
+    pickupDate: form.pickup_date || null,
+    pickupTime: form.pickup_time || null,
+    deliveryDate: form.delivery_date,
+    deliveryTime: form.delivery_time,
+    today,
+  });
+
+  // Auto-fill the locked delivery date whenever pickup changes to a valid slot.
+  useEffect(() => {
+    if (form.has_empty_containers && allowedDelivery && form.delivery_date !== allowedDelivery.date) {
+      setForm((f) => ({ ...f, delivery_date: allowedDelivery.date }));
+    }
+  }, [form.has_empty_containers, allowedDelivery?.date]);
 
   // Keep the chosen count within bounds; any bound change cancels a prior verification.
   useEffect(() => {
@@ -160,6 +190,10 @@ export default function Order() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (!scheduleCheck.ok) {
+      setError(scheduleCheck.error);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/orders', {
@@ -171,8 +205,11 @@ export default function Order() {
           total_amount: baseTotal,
           reward_requested: rewardCount,
           reward_code: codeApplied ? codeInput : null,
-          delivery_slot: form.delivery_slot || null,
-          delivery_date: form.delivery_date || null,
+          has_empty_containers: form.has_empty_containers,
+          pickupDate: form.has_empty_containers ? form.pickup_date : null,
+          pickupTime: form.has_empty_containers ? form.pickup_time : null,
+          deliveryDate: form.delivery_date,
+          deliveryTime: form.delivery_time,
         }),
       });
       const data = await res.json();
@@ -417,27 +454,99 @@ export default function Order() {
             )}
           </ClayCard>
 
-          {/* Delivery Time */}
+          {/* Pickup & Delivery Scheduling */}
           <ClayCard className="p-6">
-            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Preferred Delivery Time</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { id: 'pickup', label: 'For Pickup', sub: 'I’ll get it myself' },
-                { id: 'am', label: 'Morning', sub: '8AM–12PM' },
-                { id: 'pm', label: 'Afternoon', sub: '1PM–5PM' },
-              ].map((s) => (
-                <label key={s.id} className={`flex flex-col rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.delivery_slot === s.id ? 'clay-tile-selected' : ''}`}>
-                  <div className="flex items-center gap-2">
-                    <input type="radio" name="delivery_slot" value={s.id} checked={form.delivery_slot === s.id} onChange={() => set('delivery_slot', s.id)} className="accent-clay-sky" />
-                    <span className="font-semibold text-clay-ink">{s.label}</span>
+            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Pickup &amp; Delivery</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-clay-ink2 mb-2">Do you have empty containers at home for us to pick up? *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: true, label: 'Yes, pick them up' },
+                    { id: false, label: 'No, deliver only' },
+                  ].map((opt) => (
+                    <label key={String(opt.id)} className={`flex items-center justify-center rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.has_empty_containers === opt.id ? 'clay-tile-selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="has_empty_containers"
+                        checked={form.has_empty_containers === opt.id}
+                        onChange={() => setForm((f) => ({ ...f, has_empty_containers: opt.id, pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '' }))}
+                        className="accent-clay-sky mr-2"
+                      />
+                      <span className="font-semibold text-clay-ink">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {form.has_empty_containers ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
+                    <input required type="date" min={today} value={form.pickup_date} onChange={(e) => set('pickup_date', e.target.value)} className="clay-input" />
                   </div>
-                  <span className="text-xs text-clay-muted ml-6">{s.sub}</span>
-                </label>
-              ))}
-            </div>
-            <div className="mt-3">
-              <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
-              <input type="date" value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
+                  <div>
+                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
+                    <input
+                      required
+                      type="time"
+                      min={PICKUP_MORNING_START}
+                      max={PICKUP_AFTERNOON_END}
+                      value={form.pickup_time}
+                      onChange={(e) => set('pickup_time', e.target.value)}
+                      className="clay-input"
+                    />
+                    <p className="text-xs text-clay-muted mt-1">Allowed: {PICKUP_MORNING_START}–{PICKUP_MORNING_END} AM or {PICKUP_AFTERNOON_START}–{PICKUP_AFTERNOON_END} PM.</p>
+                    {form.pickup_time && !pickupSlot && (
+                      <p className="text-clay-danger text-xs mt-1" role="alert">Please choose a time in the morning or afternoon window above.</p>
+                    )}
+                  </div>
+
+                  {showAfternoonNotice && (
+                    <div className="clay-inset rounded-xl p-3 text-sm text-clay-ink2" role="status">
+                      We will try to pick up in the afternoon but delivery will be tomorrow.
+                    </div>
+                  )}
+
+                  {allowedDelivery && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
+                        <input type="date" value={allowedDelivery.date} readOnly disabled className="clay-input opacity-70" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
+                        <input
+                          required
+                          type="time"
+                          min={allowedDelivery.minTime}
+                          max={allowedDelivery.maxTime}
+                          value={form.delivery_time}
+                          onChange={(e) => set('delivery_time', e.target.value)}
+                          className="clay-input"
+                        />
+                        <p className="text-xs text-clay-muted mt-1">Allowed: {allowedDelivery.minTime}–{allowedDelivery.maxTime}.</p>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
+                    <input required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
+                    <input required type="time" min={DELIVERY_ONLY_START} max={DELIVERY_ONLY_END} value={form.delivery_time} onChange={(e) => set('delivery_time', e.target.value)} className="clay-input" />
+                    <p className="text-xs text-clay-muted mt-1">Allowed: {DELIVERY_ONLY_START}–{DELIVERY_ONLY_END}.</p>
+                  </div>
+                </>
+              )}
+
+              {!scheduleCheck.ok && (form.delivery_time || form.pickup_time) && (
+                <p className="text-clay-danger text-xs" role="alert">{scheduleCheck.error}</p>
+              )}
             </div>
           </ClayCard>
 
