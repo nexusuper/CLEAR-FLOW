@@ -117,6 +117,18 @@ export default function Confirmation() {
                     <span className="font-medium">{DELIVERY_SLOT_LABELS[order.delivery_slot] || order.delivery_slot}{order.delivery_date ? ` · ${order.delivery_date}` : ''}</span>
                   </div>
                 )}
+                {order.has_empty_containers ? (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Pickup</span>
+                    <span className="font-medium">{order.pickup_date} {order.pickup_time}</span>
+                  </div>
+                ) : null}
+                {order.delivery_time && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Delivery</span>
+                    <span className="font-medium">{order.delivery_date_new} {order.delivery_time}</span>
+                  </div>
+                )}
                 <div className="flex justify-between border-t border-sky-50 pt-2">
                   <span className="text-gray-700 font-bold">Total</span>
                   <span className="text-sky-600 font-bold">₱{order.total_amount}</span>

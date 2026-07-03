@@ -54,6 +54,11 @@ export default async function handler(req, res) {
           reward_requested: order.reward_requested,
           delivery_slot: order.delivery_slot,
           delivery_date: order.delivery_date,
+          has_empty_containers: order.has_empty_containers,
+          pickup_date: order.pickup_date,
+          pickup_time: order.pickup_time,
+          delivery_date_new: order.delivery_date_new,
+          delivery_time: order.delivery_time,
         });
       }
       // Phone-verified customer view: safe fields only — never expose payment/internal fields
@@ -78,6 +83,11 @@ export default async function handler(req, res) {
         reward_requested: order.reward_requested,
         delivery_slot: order.delivery_slot,
         delivery_date: order.delivery_date,
+        has_empty_containers: order.has_empty_containers,
+        pickup_date: order.pickup_date,
+        pickup_time: order.pickup_time,
+        delivery_date_new: order.delivery_date_new,
+        delivery_time: order.delivery_time,
         payment_verified: order.payment_verified,
       });
     }
