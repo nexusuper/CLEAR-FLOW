@@ -116,19 +116,20 @@ export default function Track() {
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
           Track your <span style={{ color: '#0ea5e9' }}>delivery.</span>
         </h1>
-        <p className="text-clay-muted font-semibold mt-3">Enter your Order ID to see your delivery status.</p>
+        <p className="text-clay-muted font-semibold mt-3 text-base">Enter your Order ID to see your delivery status.</p>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
         {/* Search form */}
         <form onSubmit={handleSubmit} className="clay-raised rounded-3xl p-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Order ID</label>
+          <label className="block text-base font-semibold text-clay-ink2 mb-2">Order ID</label>
+          <p className="text-sm text-clay-muted mb-2">This is the code shown when you placed your order and in your Messenger confirmation.</p>
           <div className="flex gap-2">
             <input
               value={inputId}
               onChange={(e) => setInputId(e.target.value.toUpperCase())}
               placeholder="e.g. A1B2C3D4"
-              className="clay-input flex-1 font-mono uppercase"
+              className="clay-input flex-1 font-mono uppercase text-lg"
               maxLength={8}
             />
             <button
@@ -140,6 +141,9 @@ export default function Track() {
             </button>
           </div>
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+          <a href="tel:+639123456789" className="mt-4 flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-2.5 text-sm font-semibold text-clay-skydeep">
+            <ClayIcon name="phone" className="w-4 h-4" /> Can&apos;t find your Order ID? Call us: 0912-345-6789
+          </a>
         </form>
 
         {/* Order status */}
@@ -148,12 +152,12 @@ export default function Track() {
             <div className="clay-raised rounded-3xl p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-xs text-clay-muted mb-0.5">Order ID</p>
+                  <p className="text-sm text-clay-muted mb-0.5">Order ID</p>
                   <p className="font-mono font-extrabold text-sky-600 text-xl tracking-widest">{order.id}</p>
                 </div>
                 <button
                   onClick={() => fetchOrder(order.id)}
-                  className="text-sky-500 hover:text-sky-700 text-sm font-medium"
+                  className="text-sky-500 hover:text-sky-700 text-sm font-medium clay-raised-sm rounded-full px-3 py-2"
                 >
                   <ClayIcon name="refresh" className="w-4 h-4 inline" /> Refresh
                 </button>

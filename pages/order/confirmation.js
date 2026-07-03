@@ -7,6 +7,12 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 
+const DELIVERY_SLOT_LABELS = {
+  pickup: 'Counter pickup',
+  am: 'Morning (8AM–12PM)',
+  pm: 'Afternoon (1PM–5PM)',
+};
+
 const STATUS_LABELS = {
   pending: { label: 'Pending', color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
   confirmed: { label: 'Confirmed', color: 'text-blue-600 bg-blue-50 border-blue-200' },
@@ -67,12 +73,16 @@ export default function Confirmation() {
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted mb-1">Your Order ID</p>
               <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{order.id}</p>
-              <p className="text-xs text-clay-muted mt-1">Save this to track your order</p>
+              <p className="text-base font-bold text-clay-ink2 mt-2">⚠ Please write this down or take a screenshot — you&apos;ll need it to track your order.</p>
             </ClayCard>
+
+            <a href="tel:+639123456789" className="flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-3 text-base font-semibold text-clay-skydeep">
+              <ClayIcon name="phone" className="w-5 h-5" /> Questions? Call us: 0912-345-6789
+            </a>
 
             <ClayCard className="p-6">
               <h2 className="font-editorial font-semibold text-clay-ink2 mb-3">Order Details</h2>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 text-base">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Status</span>
                   <span className={`font-semibold px-2 py-0.5 rounded-full border text-xs ${status?.color}`}>{status?.label}</span>
@@ -104,7 +114,7 @@ export default function Confirmation() {
                 {order.delivery_slot && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">Delivery Time</span>
-                    <span className="font-medium">{order.delivery_slot === 'am' ? 'Morning (8AM–12PM)' : 'Afternoon (1PM–5PM)'}{order.delivery_date ? ` · ${order.delivery_date}` : ''}</span>
+                    <span className="font-medium">{DELIVERY_SLOT_LABELS[order.delivery_slot] || order.delivery_slot}{order.delivery_date ? ` · ${order.delivery_date}` : ''}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-sky-50 pt-2">

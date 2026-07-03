@@ -43,13 +43,16 @@ export default function Rewards() {
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
         <form onSubmit={handleSubmit} className="clay-raised rounded-3xl p-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Your Phone Number</label>
+          <label className="block text-base font-semibold text-clay-ink2 mb-2">Your Phone Number</label>
           <div className="flex gap-2">
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="09XX-XXX-XXXX"
-              className="clay-input flex-1"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              className="clay-input flex-1 text-lg"
             />
             <button type="submit" disabled={loading}
                     className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60">
@@ -64,7 +67,7 @@ export default function Rewards() {
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted font-semibold mb-1">Free refills available</p>
               <p className="font-editorial text-6xl font-bold text-clay-skydeep mb-1">{data.available}</p>
-              <p className="text-xs text-clay-muted">{data.deliveredGallons} gallons delivered all-time</p>
+              <p className="text-sm text-clay-muted">{data.deliveredGallons} gallons delivered all-time</p>
             </ClayCard>
 
             <ClayCard className="p-6">
@@ -79,7 +82,7 @@ export default function Rewards() {
 
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep font-semibold">
               <ClayIcon name="info" className="w-4 h-4 inline mr-1" />
-              Use your free refills (₱{VOUCHER_VALUE} each) at checkout — verify with a Messenger code, or we&apos;ll apply them when we confirm your delivery.
+              To use a free refill (₱{VOUCHER_VALUE} each), just tell us when you order. We&apos;ll send a code to your Messenger to confirm it&apos;s you — or we can simply apply it when we deliver.
             </ClayCard>
 
             <ClayButton href="/order" className="w-full">Order &amp; Redeem</ClayButton>

@@ -6,6 +6,30 @@ import ClayIcon from '@/components/ui/ClayIcon';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { PRODUCTS, deliveryFee } from '@/lib/products';
 
+// Downscales/compresses a photo before storing it as a data URL, so payment
+// screenshots (often multi-MB phone photos) stay small enough for a text column.
+function fileToCompressedDataUrl(file, maxDim = 1024, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Order() {
   const router = useRouter();
   const { product: queryProduct } = router.query;
@@ -22,6 +46,7 @@ export default function Order() {
     payment_method: 'cod',
     gcash_number: '',
     reference_number: '',
+    payment_screenshot: '',
     notes: '',
     delivery_slot: '',
     delivery_date: '',
@@ -33,6 +58,7 @@ export default function Order() {
   const [codePhase, setCodePhase] = useState('idle'); // idle|sending|entry|verifying|verified|fallback
   const [codeInput, setCodeInput] = useState('');
   const [codeError, setCodeError] = useState('');
+  const [screenshotError, setScreenshotError] = useState('');
 
   function resetReward() {
     setRewardCount(0);
@@ -68,7 +94,7 @@ export default function Order() {
   const selectedProduct = PRODUCTS.find((p) => p.id === form.product_type) || PRODUCTS[0];
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
-  const delivery = deliveryFee(form.quantity);
+  const delivery = form.delivery_slot === 'pickup' ? 0 : deliveryFee(form.quantity);
   const baseTotal = refillTotal + containerTotal + delivery;
   const maxVouchers = maxRedeemable({
     available: rewards ? rewards.available : 0,
@@ -165,7 +191,10 @@ export default function Order() {
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
           Place Your <span style={{ color: '#0ea5e9' }}>Order.</span>
         </h1>
-        <p className="text-clay-muted font-semibold mt-3">No account needed — just fill the form below.</p>
+        <p className="text-clay-muted font-semibold mt-3 text-base">No account needed — just fill the form below.</p>
+        <a href="tel:+639123456789" className="mt-4 inline-flex items-center gap-2 clay-raised-sm rounded-full px-4 py-2.5 text-base font-semibold text-clay-skydeep clay-pressable">
+          <ClayIcon name="phone" className="w-5 h-5" /> Need help? Call us: 0912-345-6789
+        </a>
       </section>
 
       <div className="max-w-2xl mx-auto px-4 py-10">
@@ -313,7 +342,7 @@ export default function Order() {
               {[
                 { id: 'cod', label: 'Cash on Delivery' },
                 { id: 'gcash', label: 'GCash' },
-                { id: 'paymaya', label: 'PayMaya' },
+                { id: 'bank_transfer', label: 'Bank Transfer' },
               ].map((m) => (
                 <label key={m.id} className={`flex items-center gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.payment_method === m.id ? 'clay-tile-selected' : ''}`}>
                   <input type="radio" name="payment_method" value={m.id} checked={form.payment_method === m.id} onChange={() => set('payment_method', m.id)} className="accent-clay-sky" />
@@ -322,16 +351,67 @@ export default function Order() {
               ))}
             </div>
 
-            {(form.payment_method === 'gcash' || form.payment_method === 'paymaya') && (
+            {(form.payment_method === 'gcash' || form.payment_method === 'bank_transfer') && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
-                <p className="text-sm text-clay-ink2">Send payment to: <strong>0912-345-6789</strong> (Clear Flow)</p>
-                <div>
-                  <label className="block text-sm font-medium text-clay-ink2 mb-1">Your {form.payment_method === 'gcash' ? 'GCash' : 'PayMaya'} Number *</label>
-                  <input required type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
-                </div>
+                {form.payment_method === 'gcash' ? (
+                  <>
+                    <p className="text-sm text-clay-ink2">Send payment to GCash: <strong>0912-345-6789</strong> (Clear Flow)</p>
+                    <div className="flex flex-col items-center gap-2 py-2">
+                      <img src="/payment/gcash-qr.jpeg" alt="Clear Flow GCash QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
+                      <p className="text-xs text-clay-muted font-semibold">Scan with your GCash app to pay directly</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-clay-ink2 mb-1">Your GCash Number *</label>
+                      <input required type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-clay-ink2">Send payment to: <strong>BDO 0012-3456-7890</strong> (Clear Flow Water Refill)</p>
+                    <div className="flex flex-col items-center gap-2 py-2">
+                      <img src="/payment/gcash-qr.jpeg" alt="Clear Flow InstaPay QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
+                      <p className="text-xs text-clay-muted font-semibold">Or scan with your banking app&apos;s InstaPay/QR Ph transfer</p>
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-clay-ink2 mb-1">Reference Number (after payment)</label>
                   <input value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} className="clay-input" placeholder="Optional, fill after sending" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-clay-ink2 mb-1">Attach Screenshot of Payment (optional)</label>
+                  {!form.payment_screenshot ? (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setScreenshotError('');
+                        if (file.size > 5 * 1024 * 1024) {
+                          setScreenshotError('Image is too large. Please choose a photo under 5MB.');
+                          e.target.value = '';
+                          return;
+                        }
+                        try {
+                          const dataUrl = await fileToCompressedDataUrl(file);
+                          set('payment_screenshot', dataUrl);
+                        } catch {
+                          setScreenshotError('Could not read that image. Please try another.');
+                        }
+                        e.target.value = '';
+                      }}
+                      className="clay-input"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <img src={form.payment_screenshot} alt="Payment screenshot" className="w-16 h-16 object-cover rounded-xl clay-raised-sm" />
+                      <button type="button" onClick={() => set('payment_screenshot', '')} className="text-xs font-semibold text-clay-danger hover:underline">
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  {screenshotError && <p className="text-clay-danger text-xs mt-1" role="alert">{screenshotError}</p>}
                 </div>
               </div>
             )}
@@ -342,6 +422,7 @@ export default function Order() {
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Preferred Delivery Time</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
+                { id: 'pickup', label: 'For Pickup', sub: 'I’ll get it myself' },
                 { id: 'am', label: 'Morning', sub: '8AM–12PM' },
                 { id: 'pm', label: 'Afternoon', sub: '1PM–5PM' },
               ].map((s) => (
@@ -357,7 +438,6 @@ export default function Order() {
             <div className="mt-3">
               <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
               <input type="date" value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-              <p className="text-xs text-clay-muted mt-1">Leave blank for ASAP / today.</p>
             </div>
           </ClayCard>
 

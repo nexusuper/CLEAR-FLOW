@@ -8,7 +8,7 @@ import { PRODUCTS, DELIVERY_RULES } from '@/lib/products';
 const payments = [
   { icon: 'cash', name: 'Cash on Delivery', desc: 'Pay when your water arrives.' },
   { icon: 'mobile', name: 'GCash', desc: 'Send via GCash before delivery.' },
-  { icon: 'card', name: 'PayMaya', desc: 'Send via PayMaya before delivery.' },
+  { icon: 'card', name: 'Bank Transfer', desc: 'Send via bank transfer before delivery.' },
 ];
 
 export default function Products() {

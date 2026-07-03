@@ -23,6 +23,8 @@ const STATUS_COLORS = {
   cancelled: 'bg-red-100 text-red-700',
 };
 
+const DELIVERY_SLOT_SHORT = { pickup: 'PICKUP', am: 'AM', pm: 'PM' };
+
 const SORT_OPTIONS = [
   { value: 'date_desc', label: 'Newest first' },
   { value: 'date_asc', label: 'Oldest first' },
@@ -151,6 +153,14 @@ export default function AdminPanel() {
   const [reorders, setReorders] = useState(null);
   const [nudging, setNudging] = useState(null);
   const [showReorders, setShowReorders] = useState(false);
+  const [screenshots, setScreenshots] = useState([]);
+  const [screenshotsPage, setScreenshotsPage] = useState(1);
+  const [screenshotsTotalPages, setScreenshotsTotalPages] = useState(1);
+  const [screenshotsTotal, setScreenshotsTotal] = useState(0);
+  const [screenshotsLoading, setScreenshotsLoading] = useState(false);
+  const [selectedScreenshots, setSelectedScreenshots] = useState([]);
+  const [screenshotDeleting, setScreenshotDeleting] = useState(false);
+  const [screenshotDeleteModal, setScreenshotDeleteModal] = useState(false);
 
   function applyPageData(data) {
     setOrders(data.orders);
@@ -262,6 +272,47 @@ export default function AdminPanel() {
     await fetchOrders();
     setBulkDeleting(false);
     setBulkDeleteModal(false);
+  }
+
+  async function fetchScreenshots(p) {
+    const targetPage = p || screenshotsPage;
+    setScreenshotsLoading(true);
+    try {
+      const res = await fetch(`/api/orders/screenshots?page=${targetPage}`, { headers: { password: savedPassword } });
+      const data = await res.json();
+      setScreenshots(data.items || []);
+      setScreenshotsTotalPages(data.totalPages || 1);
+      setScreenshotsTotal(data.total || 0);
+      setScreenshotsPage(targetPage);
+    } catch (e) {}
+    setScreenshotsLoading(false);
+  }
+
+  function toggleScreenshotSelectAll() {
+    if (screenshots.length > 0 && screenshots.every((s) => selectedScreenshots.includes(s.id))) {
+      setSelectedScreenshots([]);
+    } else {
+      setSelectedScreenshots(screenshots.map((s) => s.id));
+    }
+  }
+
+  function toggleScreenshotOne(id) {
+    setSelectedScreenshots((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  async function deleteScreenshots(ids) {
+    setScreenshotDeleting(true);
+    await fetch('/api/orders/screenshots', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', password: savedPassword },
+      body: JSON.stringify({ ids }),
+    });
+    setSelectedScreenshots([]);
+    await fetchScreenshots(screenshotsPage);
+    setScreenshotDeleting(false);
+    setScreenshotDeleteModal(false);
   }
 
   const searchTimer = useRef(null);
@@ -629,6 +680,10 @@ export default function AdminPanel() {
     if (activeTab === 'inventory' && authed) fetchInventory();
   }, [activeTab, authed]);
 
+  useEffect(() => {
+    if (activeTab === 'screenshots' && authed) fetchScreenshots(1);
+  }, [activeTab, authed]);
+
   const filtered = orders;
 
   const deletableInView = filtered.filter((o) => DELETABLE_STATUSES.includes(o.status));
@@ -661,11 +716,11 @@ export default function AdminPanel() {
             <div>
               <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
               <p className="text-sky-200 text-sm">
-                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? `${route?.total ?? 0} stops today` : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : 'Business overview'}
+                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? `${route?.total ?? 0} stops today` : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? `${screenshotsTotal} payment screenshots` : 'Business overview'}
               </p>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => activeTab === 'orders' ? fetchOrders() : (fetchCustomers(1), fetchCustStats())} className="bg-sky-500 hover:bg-sky-400 px-4 py-2 rounded-full text-sm font-medium transition-colors">
+              <button onClick={() => activeTab === 'orders' ? fetchOrders() : activeTab === 'screenshots' ? fetchScreenshots(screenshotsPage) : (fetchCustomers(1), fetchCustStats())} className="bg-sky-500 hover:bg-sky-400 px-4 py-2 rounded-full text-sm font-medium transition-colors">
                 <ClayIcon name="refresh" className="w-4 h-4 inline" /> Refresh
               </button>
               <button
@@ -715,6 +770,12 @@ export default function AdminPanel() {
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'pos' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
               <ClayIcon name="cash" className="w-4 h-4 inline mr-1" /> POS
+            </button>
+            <button
+              onClick={() => setActiveTab('screenshots')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'screenshots' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="card" className="w-4 h-4 inline mr-1" /> Payment Screenshots
             </button>
           </div>
         </div>
@@ -1006,9 +1067,14 @@ export default function AdminPanel() {
                             {o.need_container ? <div className="text-gray-400 text-xs">+{o.container_quantity} container(s)</div> : null}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="uppercase text-xs font-semibold text-gray-600">{o.payment_method}</div>
+                            <div className="uppercase text-xs font-semibold text-gray-600">{o.payment_method === 'bank_transfer' ? 'BANK TRANSFER' : o.payment_method}</div>
                             {o.reference_number && <div className="text-gray-400 text-xs">Ref: {o.reference_number}</div>}
-                            {(o.payment_method === 'gcash' || o.payment_method === 'paymaya') && (
+                            {o.payment_screenshot && (
+                              <a href={o.payment_screenshot} target="_blank" rel="noopener noreferrer" className="inline-block mt-1">
+                                <img src={o.payment_screenshot} alt="Payment screenshot" className="w-10 h-10 object-cover rounded-lg border border-gray-200 hover:opacity-80" />
+                              </a>
+                            )}
+                            {(o.payment_method === 'gcash' || o.payment_method === 'bank_transfer') && (
                               <label className="flex items-center gap-1 mt-1 cursor-pointer">
                                 <input
                                   type="checkbox"
@@ -1035,7 +1101,7 @@ export default function AdminPanel() {
                             {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             {o.delivery_slot ? (
                               <div className="text-[10px] font-semibold text-sky-600">
-                                {o.delivery_slot === 'am' ? 'AM' : 'PM'}{o.delivery_date ? ` · ${o.delivery_date}` : ''}
+                                {DELIVERY_SLOT_SHORT[o.delivery_slot] || o.delivery_slot}{o.delivery_date ? ` · ${o.delivery_date}` : ''}
                               </div>
                             ) : null}
                           </td>
@@ -1054,6 +1120,9 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
+                              <a href={`tel:${o.phone}`} title="Call customer" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                                <ClayIcon name="phone" className="w-4 h-4" />
+                              </a>
                               {NOTIFIABLE_STATUSES.includes(o.status) && (
                                 <>
                                   <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
@@ -1772,7 +1841,7 @@ export default function AdminPanel() {
                             <div className="flex-1">
                               <div className="font-semibold text-clay-ink flex items-center gap-2">
                                 {o.customer_name}
-                                {o.delivery_slot && <span className="text-[10px] font-semibold text-sky-600">{o.delivery_slot === 'am' ? 'AM' : 'PM'}</span>}
+                                {o.delivery_slot && <span className="text-[10px] font-semibold text-sky-600">{DELIVERY_SLOT_SHORT[o.delivery_slot] || o.delivery_slot}</span>}
                               </div>
                               <div className="text-sm text-gray-600">{o.address}</div>
                               <div className="text-xs text-gray-400">{o.product_type} x{o.quantity}</div>
@@ -1883,6 +1952,117 @@ export default function AdminPanel() {
           {/* ===== POS TAB ===== */}
           {activeTab === 'pos' && (
             <POSPanel savedPassword={savedPassword} onSaleComplete={() => { fetchOrders(); }} />
+          )}
+
+          {/* ===== SCREENSHOTS TAB ===== */}
+          {activeTab === 'screenshots' && (
+            <div className="space-y-4">
+              {screenshotDeleteModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+                  <div className="clay-raised rounded-3xl p-6 max-w-sm w-full">
+                    <ClayIcon name="trash" className="w-8 h-8 mx-auto mb-3 text-red-500" />
+                    <h2 className="text-lg font-bold text-gray-800 text-center mb-2">
+                      Delete {selectedScreenshots.length} screenshot{selectedScreenshots.length > 1 ? 's' : ''}?
+                    </h2>
+                    <p className="text-sm text-gray-500 text-center mb-2">The order itself will be kept — only the attached image is removed.</p>
+                    <p className="text-xs text-red-400 text-center mb-5">This cannot be undone.</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setScreenshotDeleteModal(false)} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors">Cancel</button>
+                      <button onClick={() => deleteScreenshots(selectedScreenshots)} disabled={screenshotDeleting} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50">
+                        {screenshotDeleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="clay-raised rounded-2xl p-4 flex items-center justify-between flex-wrap gap-2">
+                <label className="flex items-center gap-2 text-sm font-semibold text-clay-ink cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={screenshots.length > 0 && screenshots.every((s) => selectedScreenshots.includes(s.id))}
+                    onChange={toggleScreenshotSelectAll}
+                    className="w-4 h-4 accent-sky-500 cursor-pointer"
+                  />
+                  Select all on this page
+                </label>
+                {selectedScreenshots.length > 0 && (
+                  <button onClick={() => setScreenshotDeleteModal(true)} className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1.5 rounded-full transition-colors">
+                    <ClayIcon name="trash" className="w-3.5 h-3.5 inline" /> Delete {selectedScreenshots.length} selected
+                  </button>
+                )}
+              </div>
+
+              {screenshotsLoading && screenshots.length === 0 && (
+                <p className="text-clay-ink/60 text-sm">Loading screenshots…</p>
+              )}
+              {!screenshotsLoading && screenshots.length === 0 && (
+                <div className="clay-raised rounded-2xl p-12 text-center text-gray-400">No payment screenshots yet</div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {screenshots.map((s) => (
+                  <div key={s.id} className={`clay-raised rounded-2xl p-4 ${selectedScreenshots.includes(s.id) ? 'ring-2 ring-sky-400' : ''}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedScreenshots.includes(s.id)}
+                          onChange={() => toggleScreenshotOne(s.id)}
+                          className="w-4 h-4 accent-sky-500 cursor-pointer"
+                        />
+                        <span className="font-mono font-bold text-sky-600 text-sm">{s.id}</span>
+                      </label>
+                      <span className="text-[10px] uppercase font-semibold text-gray-500">{s.payment_method === 'bank_transfer' ? 'BANK TRANSFER' : s.payment_method}</span>
+                    </div>
+                    <a href={s.payment_screenshot} target="_blank" rel="noopener noreferrer">
+                      <img src={s.payment_screenshot} alt={`Payment screenshot for order ${s.id}`} className="w-full h-40 object-cover rounded-xl border border-gray-200 hover:opacity-90 mb-2" />
+                    </a>
+                    <div className="text-sm text-gray-700 font-medium">{s.customer_name}</div>
+                    <div className="text-xs text-gray-400">{s.phone}</div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {new Date(s.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    {s.reference_number && <div className="text-xs text-gray-400">Ref: {s.reference_number}</div>}
+                    <div className="flex gap-2 mt-3">
+                      <a
+                        href={s.payment_screenshot}
+                        download={`payment-${s.id}.jpg`}
+                        className="flex-1 text-center text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1.5 rounded-full transition-colors"
+                      >
+                        <ClayIcon name="download" className="w-3.5 h-3.5 inline mr-1" /> Download
+                      </a>
+                      <button
+                        onClick={() => { setSelectedScreenshots([s.id]); setScreenshotDeleteModal(true); }}
+                        className="flex-1 text-center text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1.5 rounded-full transition-colors"
+                      >
+                        <ClayIcon name="trash" className="w-3.5 h-3.5 inline mr-1" /> Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {screenshotsTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    disabled={screenshotsPage <= 1 || screenshotsLoading}
+                    onClick={() => fetchScreenshots(screenshotsPage - 1)}
+                    className="clay-btn-white text-sm px-4 py-2 rounded-full disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-500">Page {screenshotsPage} of {screenshotsTotalPages}</span>
+                  <button
+                    disabled={screenshotsPage >= screenshotsTotalPages || screenshotsLoading}
+                    onClick={() => fetchScreenshots(screenshotsPage + 1)}
+                    className="clay-btn-white text-sm px-4 py-2 rounded-full disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
         </div>

@@ -20,14 +20,15 @@ const OrderSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(50),
   need_container: z.boolean().or(z.literal(0)).or(z.literal(1)).optional().default(false),
   container_quantity: z.coerce.number().int().min(0).max(50).optional().default(0),
-  payment_method: z.enum(['cod', 'gcash', 'paymaya']),
+  payment_method: z.enum(['cod', 'gcash', 'bank_transfer']),
   gcash_number: z.string().max(20).optional().nullable(),
   reference_number: z.string().max(100).optional().nullable(),
+  payment_screenshot: z.string().max(2_000_000).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   total_amount: z.coerce.number().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
   reward_code: z.string().max(10).optional().nullable(),
-  delivery_slot: z.enum(['am', 'pm']).optional().nullable(),
+  delivery_slot: z.enum(['am', 'pm', 'pickup']).optional().nullable(),
   delivery_date: z.string().max(20).optional().nullable(),
 });
 
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
       customer_name, phone, address, barangay,
       product_type, quantity,
       need_container, container_quantity,
-      payment_method, gcash_number, reference_number,
+      payment_method, gcash_number, reference_number, payment_screenshot,
       notes, reward_requested, reward_code,
       delivery_slot, delivery_date,
     } = parsed.data;
@@ -120,7 +121,7 @@ export default async function handler(req, res) {
     const containerSize = product.size;
     const refillSubtotal = product.refill * quantity;
     const containerSubtotal = need_container ? product.container * (container_quantity || 0) : 0;
-    const computedBase = refillSubtotal + containerSubtotal + deliveryFee(quantity);
+    const computedBase = refillSubtotal + containerSubtotal + (delivery_slot === 'pickup' ? 0 : deliveryFee(quantity));
 
     const normPhone = normalizePhone(phone);
     let available = 0;
@@ -180,6 +181,7 @@ export default async function handler(req, res) {
     const gn = gcash_number || null;
     const rn = reference_number || null;
     const nt = notes || null;
+    const ps = payment_screenshot || null;
 
     try {
       await sql`
@@ -187,7 +189,7 @@ export default async function handler(req, res) {
           id, customer_name, phone, address, barangay,
           product_type, container_size, quantity,
           need_container, container_quantity,
-          payment_method, gcash_number, reference_number,
+          payment_method, gcash_number, reference_number, payment_screenshot,
           notes, total_amount, created_at,
           voucher_count, voucher_discount, reward_requested,
           phone_normalized, delivery_slot, delivery_date
@@ -195,7 +197,7 @@ export default async function handler(req, res) {
           ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
           ${product_type}, ${containerSize}, ${quantity},
           ${nc}, ${cq},
-          ${payment_method}, ${gn}, ${rn},
+          ${payment_method}, ${gn}, ${rn}, ${ps},
           ${nt}, ${finalTotal}, ${created_at},
           ${voucher_count}, ${voucher_discount}, ${reward_requested_store},
           ${normPhone}, ${delivery_slot || null}, ${delivery_date || null}

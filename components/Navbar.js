@@ -57,7 +57,7 @@ export default function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden text-clay-ink2"
+          className="md:hidden text-clay-ink2 clay-raised-sm rounded-full w-11 h-11 grid place-items-center"
           onClick={() => setOpen(!open)}
           aria-label={open ? 'Close menu' : 'Open menu'}
           aria-expanded={open}
