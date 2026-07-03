@@ -5,6 +5,7 @@ import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdmin, verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
+import { validateSchedule } from '@/lib/scheduling';
 import { z } from 'zod';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
@@ -28,8 +29,11 @@ const OrderSchema = z.object({
   total_amount: z.coerce.number().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
   reward_code: z.string().max(10).optional().nullable(),
-  delivery_slot: z.enum(['am', 'pm', 'pickup']).optional().nullable(),
-  delivery_date: z.string().max(20).optional().nullable(),
+  has_empty_containers: z.boolean().or(z.literal(0)).or(z.literal(1)).optional().default(false),
+  pickupDate: z.string().max(10).optional().nullable(),
+  pickupTime: z.string().max(5).optional().nullable(),
+  deliveryDate: z.string().max(10).min(1),
+  deliveryTime: z.string().max(5).min(1),
 });
 
 export default async function handler(req, res) {
@@ -109,7 +113,7 @@ export default async function handler(req, res) {
       need_container, container_quantity,
       payment_method, gcash_number, reference_number, payment_screenshot,
       notes, reward_requested, reward_code,
-      delivery_slot, delivery_date,
+      has_empty_containers, pickupDate, pickupTime, deliveryDate, deliveryTime,
     } = parsed.data;
 
     // Price is computed server-side from the catalog — never trust the client's
@@ -118,10 +122,20 @@ export default async function handler(req, res) {
     if (!product) {
       return res.status(400).json({ error: 'Unknown product' });
     }
+
+    const hasEmptyContainers = !!has_empty_containers;
+    const today = new Date().toISOString().slice(0, 10);
+    const scheduleCheck = validateSchedule({
+      hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today,
+    });
+    if (!scheduleCheck.ok) {
+      return res.status(400).json({ error: scheduleCheck.error });
+    }
+
     const containerSize = product.size;
     const refillSubtotal = product.refill * quantity;
     const containerSubtotal = need_container ? product.container * (container_quantity || 0) : 0;
-    const computedBase = refillSubtotal + containerSubtotal + (delivery_slot === 'pickup' ? 0 : deliveryFee(quantity));
+    const computedBase = refillSubtotal + containerSubtotal + deliveryFee(quantity);
 
     const normPhone = normalizePhone(phone);
     let available = 0;
@@ -183,26 +197,47 @@ export default async function handler(req, res) {
     const nt = notes || null;
     const ps = payment_screenshot || null;
 
+    const hec = hasEmptyContainers ? 1 : 0;
+    const insertOrder = sql`
+      INSERT INTO orders (
+        id, customer_name, phone, address, barangay,
+        product_type, container_size, quantity,
+        need_container, container_quantity,
+        payment_method, gcash_number, reference_number, payment_screenshot,
+        notes, total_amount, created_at,
+        voucher_count, voucher_discount, reward_requested,
+        phone_normalized, has_empty_containers, pickup_date, pickup_time,
+        delivery_date_new, delivery_time
+      ) VALUES (
+        ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
+        ${product_type}, ${containerSize}, ${quantity},
+        ${nc}, ${cq},
+        ${payment_method}, ${gn}, ${rn}, ${ps},
+        ${nt}, ${finalTotal}, ${created_at},
+        ${voucher_count}, ${voucher_discount}, ${reward_requested_store},
+        ${normPhone}, ${hec}, ${hasEmptyContainers ? pickupDate : null}, ${hasEmptyContainers ? pickupTime : null},
+        ${deliveryDate}, ${deliveryTime}
+      )
+    `;
+
     try {
-      await sql`
-        INSERT INTO orders (
-          id, customer_name, phone, address, barangay,
-          product_type, container_size, quantity,
-          need_container, container_quantity,
-          payment_method, gcash_number, reference_number, payment_screenshot,
-          notes, total_amount, created_at,
-          voucher_count, voucher_discount, reward_requested,
-          phone_normalized, delivery_slot, delivery_date
-        ) VALUES (
-          ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
-          ${product_type}, ${containerSize}, ${quantity},
-          ${nc}, ${cq},
-          ${payment_method}, ${gn}, ${rn}, ${ps},
-          ${nt}, ${finalTotal}, ${created_at},
-          ${voucher_count}, ${voucher_discount}, ${reward_requested_store},
-          ${normPhone}, ${delivery_slot || null}, ${delivery_date || null}
-        )
-      `;
+      if (hasEmptyContainers) {
+        const pickupId = uuidv4().slice(0, 8).toUpperCase();
+        const insertPickup = sql`
+          INSERT INTO container_pickups (
+            id, order_id, customer_name, phone, phone_normalized, address, barangay,
+            container_qty, pickup_date, pickup_time, delivery_date, delivery_time,
+            status, notes, messenger_psid, created_at, updated_at
+          ) VALUES (
+            ${pickupId}, ${id}, ${customer_name}, ${phone}, ${normPhone}, ${address}, ${barangay},
+            ${quantity}, ${pickupDate}, ${pickupTime}, ${deliveryDate}, ${deliveryTime},
+            'scheduled', '', NULL, ${created_at}, ${created_at}
+          )
+        `;
+        await sql.transaction([insertOrder, insertPickup]);
+      } else {
+        await insertOrder;
+      }
     } catch (err) {
       console.error('Order insert failed:', err);
       return res.status(500).json({ error: 'Failed to place order' });
