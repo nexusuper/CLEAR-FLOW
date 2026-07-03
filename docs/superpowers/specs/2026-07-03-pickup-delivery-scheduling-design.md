@@ -34,6 +34,8 @@ When the customer selects an afternoon pickup time (>= 1:00 PM), show a popup/in
 
 Delivery-only orders: date >= today, time 7:00 AM–6:00 PM, no popup, no pickup fields shown.
 
+**Ordering invariant:** for refill orders, the delivery datetime must always be strictly later than the pickup datetime — pickup always comes first, delivery always goes last. This falls out of the window table above (same-day delivery only opens at 1:00 PM, after the 10:59 AM morning-pickup cutoff; next-day delivery only applies after an afternoon pickup), but it is also enforced as an explicit, independent check — both client-side (reject/disable a delivery time that isn't after the selected pickup time) and server-side (reject the request outright, regardless of which window bucket the times nominally fall in) — so no combination of pickup/delivery values can ever produce delivery <= pickup.
+
 ## Data Model
 
 ### `orders` table changes
@@ -84,7 +86,7 @@ Created in the same request as the order (via `sql.transaction`, matching the pa
 ### `pages/api/orders.js` (POST)
 - Zod schema: replace `delivery_slot`/`delivery_date` with:
   - `pickupDate`, `pickupTime` — required if `quantity > 0`, validated against the morning/afternoon windows.
-  - `deliveryDate`, `deliveryTime` — always required, validated against the derived allowed window (recomputed server-side from pickup time — never trust client-computed delivery window).
+  - `deliveryDate`, `deliveryTime` — always required, validated against the derived allowed window (recomputed server-side from pickup time — never trust client-computed delivery window), and additionally checked to be strictly after `pickupDate`+`pickupTime` when a pickup is present (belt-and-suspenders on top of the window check).
 - On insert, if `quantity > 0`, also insert a `container_pickups` row in the same transaction.
 
 ### `pages/api/orders/[id].js`
