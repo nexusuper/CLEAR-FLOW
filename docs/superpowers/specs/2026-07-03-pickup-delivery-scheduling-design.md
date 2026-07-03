@@ -16,10 +16,13 @@ Refill orders currently capture a vague `delivery_slot` (`am`/`pm`/`pickup`) and
 
 ## Order Type Rule
 
-- **Refill order** (`quantity > 0`, i.e. the customer has containers to return): pickup + computed-window delivery flow.
-- **Delivery-only order** (`quantity === 0`, buying new container(s) only): no pickup step; customer freely picks any delivery date + time.
+**Correction from initial draft:** `quantity` (# of refills) is already required `>= 1` on every order in the current schema/form — it can't be used to infer order type, since even a first-time customer buying a brand-new container still orders it filled (quantity stays >= 1). Order type must instead be an explicit choice the customer makes, since only the customer knows whether they physically have empty containers sitting at home for us to collect.
 
-An order can carry both a refill quantity and new containers (`need_container`/`container_quantity`) — if `quantity > 0` it's still treated as a refill order (pickup applies to the returnable containers being refilled).
+Add a new required field, `has_empty_containers` (boolean), presented as an explicit choice at the top of the scheduling section:
+- **"Yes, I have empty containers for you to pick up"** → refill/pickup flow: pickup + computed-window delivery.
+- **"No, I need new container(s)" / first-time customer** → delivery-only flow: no pickup step, free date/time choice for delivery.
+
+This field is independent of (but typically correlated with) `need_container`: a customer can select "No pickup needed" while also NOT checking "I need a new container" (e.g. a first delivery where the shop supplies a loaner/starter container as part of a promo) — the scheduling flow only cares about `has_empty_containers`, not `need_container`. `need_container`/`container_quantity` remain unchanged, governing only the container-purchase line item and pricing.
 
 ## Time Window Rules
 
@@ -51,7 +54,13 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_time TEXT; -- 'HH:MM' 24h
 
 Postgres (Neon) supports `ADD COLUMN IF NOT EXISTS` directly — use the same migration pattern already present in `lib/db.js` for prior column additions.
 
-`pickup_date`/`pickup_time` are null for delivery-only orders. `delivery_date_new`/`delivery_time` are always set (both order types). The old `delivery_date`/`delivery_slot` columns stay for historical rows but the API stops accepting/writing them for new orders.
+Also add the discriminator column itself:
+
+```sql
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_empty_containers INTEGER NOT NULL DEFAULT 0;
+```
+
+`pickup_date`/`pickup_time` are null when `has_empty_containers = 0` (delivery-only). `delivery_date_new`/`delivery_time` are always set (both order types). The old `delivery_date`/`delivery_slot` columns stay for historical rows but the API stops accepting/writing them for new orders.
 
 ### New `container_pickups` table
 
@@ -79,15 +88,16 @@ CREATE INDEX IF NOT EXISTS idx_container_pickups_status ON container_pickups (st
 CREATE INDEX IF NOT EXISTS idx_container_pickups_date ON container_pickups (pickup_date);
 ```
 
-Created in the same request as the order (via `sql.transaction`, matching the pattern in `lib/inventory.js`) whenever `quantity > 0`. `container_qty` = order `quantity`. `messenger_psid` copied from the order for messaging.
+Created in the same request as the order (via `sql.transaction`, matching the pattern in `lib/inventory.js`) whenever `has_empty_containers = true`. `container_qty` = order `quantity`. `messenger_psid` copied from the order for messaging.
 
 ## API Changes
 
 ### `pages/api/orders.js` (POST)
 - Zod schema: replace `delivery_slot`/`delivery_date` with:
-  - `pickupDate`, `pickupTime` — required if `quantity > 0`, validated against the morning/afternoon windows.
+  - `has_empty_containers` — required boolean.
+  - `pickupDate`, `pickupTime` — required if `has_empty_containers` is true, validated against the morning/afternoon windows.
   - `deliveryDate`, `deliveryTime` — always required, validated against the derived allowed window (recomputed server-side from pickup time — never trust client-computed delivery window), and additionally checked to be strictly after `pickupDate`+`pickupTime` when a pickup is present (belt-and-suspenders on top of the window check).
-- On insert, if `quantity > 0`, also insert a `container_pickups` row in the same transaction.
+- On insert, if `has_empty_containers` is true, also insert a `container_pickups` row in the same transaction.
 
 ### `pages/api/orders/[id].js`
 - No structural change; `pickup_date/time`, `delivery_date_new/time` are read-only after creation via this route (rescheduling, if needed later, is out of scope — see below).
@@ -104,10 +114,11 @@ Created in the same request as the order (via `sql.transaction`, matching the pa
 
 - Keep existing product/quantity/container fields.
 - Replace the single AM/PM/pickup radio + date input with:
-  - If `quantity > 0` (refill order — computed live from the quantity field): show **"When should we pick up your empty containers?"** — date picker (min = today) + time picker (native `<input type="time">`, constrained to 6:00–17:00 via `min`/`max`, with the 11:00–13:00 gap enforced by inline validation since native time inputs can't express a gap).
+  - A new required choice at the top of the scheduling section: **"Do you have empty containers at home for us to pick up?"** (Yes/No tile radio, sets `has_empty_containers`).
+  - If Yes: show **"When should we pick up your empty containers?"** — date picker (min = today) + time picker (native `<input type="time">`, constrained to 6:00–17:00 via `min`/`max`, with the 11:00–13:00 gap enforced by inline validation since native time inputs can't express a gap).
     - On selecting a time >= 13:00, show the clay-styled inline notice: *"We will try to pick up in the afternoon but delivery will be tomorrow."*
     - Then show **"When should we deliver your refill?"** — date is auto-filled and locked (today or tomorrow per the rule, displayed as read-only text) + a time picker constrained to the computed allowed range.
-  - Else (delivery-only): show a single **"When should we deliver?"** date (min = today) + time picker (7:00–18:00, no gap).
+  - If No: show a single **"When should we deliver?"** date (min = today) + time picker (7:00–18:00, no gap).
 - Client-side validation mirrors server-side; server is the source of truth.
 
 ## Admin Panel
