@@ -151,13 +151,17 @@ export default function ContainerPickupsPanel({ savedPassword }) {
                     </td>
                     <td className="py-2 pr-3">
                       <div className="flex flex-wrap gap-1">
-                        <button onClick={() => notify(p.id, p.status, 'sms')} disabled={notifying === p.id + 'sms'} title="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
-                          SMS
-                        </button>
-                        {p.messenger_psid && (
-                          <button onClick={() => notify(p.id, p.status, 'messenger')} disabled={notifying === p.id + 'messenger'} title="Send via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
-                            Messenger
-                          </button>
+                        {p.status !== 'cancelled' && (
+                          <>
+                            <button onClick={() => notify(p.id, p.status, 'sms')} disabled={notifying === p.id + 'sms'} title="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                              SMS
+                            </button>
+                            {p.messenger_psid && (
+                              <button onClick={() => notify(p.id, p.status, 'messenger')} disabled={notifying === p.id + 'messenger'} title="Send via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                                Messenger
+                              </button>
+                            )}
+                          </>
                         )}
                         {DELETABLE_STATUSES.includes(p.status) && (
                           <button onClick={() => setDeleteModal(p)} className="text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-2 py-1 rounded-full transition-colors">
@@ -198,13 +202,17 @@ export default function ContainerPickupsPanel({ savedPassword }) {
                   {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
                 <div className="flex flex-wrap gap-1">
-                  <button onClick={() => notify(p.id, p.status, 'sms')} disabled={notifying === p.id + 'sms'} className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
-                    Copy SMS
-                  </button>
-                  {p.messenger_psid && (
-                    <button onClick={() => notify(p.id, p.status, 'messenger')} disabled={notifying === p.id + 'messenger'} className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
-                      Messenger
-                    </button>
+                  {p.status !== 'cancelled' && (
+                    <>
+                      <button onClick={() => notify(p.id, p.status, 'sms')} disabled={notifying === p.id + 'sms'} className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                        Copy SMS
+                      </button>
+                      {p.messenger_psid && (
+                        <button onClick={() => notify(p.id, p.status, 'messenger')} disabled={notifying === p.id + 'messenger'} className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                          Messenger
+                        </button>
+                      )}
+                    </>
                   )}
                   {DELETABLE_STATUSES.includes(p.status) && (
                     <button onClick={() => setDeleteModal(p)} className="text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-2 py-1 rounded-full transition-colors">
