@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import ClayIcon from './ui/ClayIcon';
 import POSPanel from './admin/POSPanel';
+import ContainerPickupsPanel from './admin/ContainerPickupsPanel';
 import { SEGMENT_DEFS } from '@/lib/segments';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
@@ -23,7 +24,6 @@ const STATUS_COLORS = {
   cancelled: 'bg-red-100 text-red-700',
 };
 
-const DELIVERY_SLOT_SHORT = { pickup: 'PICKUP', am: 'AM', pm: 'PM' };
 
 const SORT_OPTIONS = [
   { value: 'date_desc', label: 'Newest first' },
@@ -772,6 +772,12 @@ export default function AdminPanel() {
               <ClayIcon name="cash" className="w-4 h-4 inline mr-1" /> POS
             </button>
             <button
+              onClick={() => setActiveTab('pickups')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'pickups' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="clipboard" className="w-4 h-4 inline mr-1" /> Pickups
+            </button>
+            <button
               onClick={() => setActiveTab('screenshots')}
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'screenshots' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
@@ -1099,9 +1105,9 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                             {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                            {o.delivery_slot ? (
+                            {(o.delivery_slot || o.delivery_time) ? (
                               <div className="text-[10px] font-semibold text-sky-600">
-                                {DELIVERY_SLOT_SHORT[o.delivery_slot] || o.delivery_slot}{o.delivery_date ? ` · ${o.delivery_date}` : ''}
+                                {o.has_empty_containers ? `Pickup ${o.pickup_date || ''} ${o.pickup_time || ''} · ` : ''}Delivery {o.delivery_date_new || ''} {o.delivery_time || ''}
                               </div>
                             ) : null}
                           </td>
@@ -1841,7 +1847,7 @@ export default function AdminPanel() {
                             <div className="flex-1">
                               <div className="font-semibold text-clay-ink flex items-center gap-2">
                                 {o.customer_name}
-                                {o.delivery_slot && <span className="text-[10px] font-semibold text-sky-600">{DELIVERY_SLOT_SHORT[o.delivery_slot] || o.delivery_slot}</span>}
+                                {o.delivery_time && <span className="text-[10px] font-semibold text-sky-600">{o.delivery_date_new} {o.delivery_time}</span>}
                               </div>
                               <div className="text-sm text-gray-600">{o.address}</div>
                               <div className="text-xs text-gray-400">{o.product_type} x{o.quantity}</div>
@@ -1952,6 +1958,11 @@ export default function AdminPanel() {
           {/* ===== POS TAB ===== */}
           {activeTab === 'pos' && (
             <POSPanel savedPassword={savedPassword} onSaleComplete={() => { fetchOrders(); }} />
+          )}
+
+          {/* ===== PICKUPS TAB ===== */}
+          {activeTab === 'pickups' && (
+            <ContainerPickupsPanel savedPassword={savedPassword} />
           )}
 
           {/* ===== SCREENSHOTS TAB ===== */}
