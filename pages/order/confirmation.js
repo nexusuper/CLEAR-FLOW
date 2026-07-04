@@ -154,7 +154,7 @@ export default function Confirmation() {
 
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep">
               <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.
-              <br />Expected: <strong>within 2–4 hours</strong> (or same day if ordered before 2PM).
+              <br />Expected: <strong>within 2–4 hours</strong> (or same day if ordered before 11AM).
             </ClayCard>
 
             <div className="flex flex-col gap-3">

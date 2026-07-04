@@ -17,7 +17,7 @@ const features = [
   {
     icon: 'bolt',
     title: 'Same-Day Delivery',
-    desc: 'Order before 2PM and get your water delivered today anywhere within your area.',
+    desc: 'Order before 11AM and get your water delivered today anywhere within your area.',
   },
   {
     icon: 'filter',
@@ -113,7 +113,7 @@ export default function Home() {
             Affordable, premium water.
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 max-w-2xl mx-auto gap-6 mb-8">
           {PRODUCTS.map((p, i) => (
             <ClayCard key={p.id} className={`p-7 text-center reveal reveal-d${i}`}>
               <span className="inline-block text-xs font-extrabold text-white rounded-full px-3 py-1 mb-4 clay-btn-primary">
