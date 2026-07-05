@@ -112,6 +112,8 @@ export default function AdminPanel() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalOrders, setTotalOrders] = useState(0);
   const [statusCounts, setStatusCounts] = useState({});
+  const [newOrderCount, setNewOrderCount] = useState(0);
+  const lastSeenOrderIdRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('orders');
   const [customers, setCustomers] = useState([]);
@@ -193,6 +195,41 @@ export default function AdminPanel() {
       }
       applyPageData(data);
     }
+  }
+
+  function playNewOrderBeep() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.18);
+    } catch (e) {}
+  }
+
+  async function pollForNewOrders() {
+    try {
+      const res = await fetch('/api/orders?page=1&limit=1&sort=date_desc', { headers: { password: savedPassword } });
+      if (!res.ok) return;
+      const data = await res.json();
+      const latest = data.orders?.[0];
+      if (!latest) return;
+      if (lastSeenOrderIdRef.current === null) {
+        lastSeenOrderIdRef.current = latest.id;
+        return;
+      }
+      if (latest.id !== lastSeenOrderIdRef.current) {
+        lastSeenOrderIdRef.current = latest.id;
+        setNewOrderCount((n) => n + 1);
+        playNewOrderBeep();
+        fetchOrders();
+      }
+    } catch (e) {}
   }
 
   async function togglePaymentVerified(id, verified) {
@@ -684,6 +721,14 @@ export default function AdminPanel() {
     if (activeTab === 'screenshots' && authed) fetchScreenshots(1);
   }, [activeTab, authed]);
 
+  useEffect(() => {
+    if (!authed || activeTab !== 'orders') return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') pollForNewOrders();
+    }, 25000);
+    return () => clearInterval(timer);
+  }, [authed, activeTab, savedPassword]);
+
   const filtered = orders;
 
   const deletableInView = filtered.filter((o) => DELETABLE_STATUSES.includes(o.status));
@@ -938,6 +983,21 @@ export default function AdminPanel() {
                     Done
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* New Order Alert */}
+          {newOrderCount > 0 && (
+            <div className="fixed top-4 right-4 z-50">
+              <div className="rounded-xl shadow-lg p-4 max-w-sm bg-sky-500 text-white flex items-center gap-3">
+                <ClayIcon name="bolt" className="w-5 h-5" />
+                <span className="text-sm font-semibold">
+                  {newOrderCount} new order{newOrderCount > 1 ? 's' : ''} came in
+                </span>
+                <button onClick={() => setNewOrderCount(0)} className="text-white/80 hover:text-white text-sm font-bold px-1">
+                  ✕
+                </button>
               </div>
             </div>
           )}

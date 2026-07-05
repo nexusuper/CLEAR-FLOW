@@ -12,13 +12,13 @@ export default function AnimatedHero() {
           </div>
 
           <h1 className="font-editorial text-5xl md:text-[4.5rem] font-bold leading-[1.04] tracking-tight text-clay-ink">
-            Fresh Water,{' '}
-            <span style={{ color: '#0ea5e9' }}>Delivered</span>
-            <br />to Your Door.
+            Never Run Out{' '}
+            <span style={{ color: '#0ea5e9' }}>of Water</span>
+            <br />Again.
           </h1>
 
           <p className="text-clay-muted text-lg font-semibold leading-relaxed max-w-[50ch]">
-            Order purified water refills in minutes. No account needed — fill the form and we deliver the same day.
+            Schedule refills, track deliveries live, and earn free-gallon vouchers on every order — no account needed. Order before 11AM, drink it today.
           </p>
 
           <div className="flex flex-wrap gap-3">
@@ -35,7 +35,7 @@ export default function AnimatedHero() {
                 </svg>
               ))}
             </span>
-            <span className="text-clay-muted text-sm font-semibold">Trusted by 500+ households in Bugo, CDO</span>
+            <span className="text-clay-muted text-sm font-semibold">Trusted by 500+ households · zero-hassle reorders</span>
           </div>
         </div>
 
