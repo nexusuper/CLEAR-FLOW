@@ -50,122 +50,71 @@ export default async function handler(req, res) {
     };
     const orderBy = sortMap[sortParam] || sql`last_order DESC`;
 
-    let rows, countResult;
-
-    if (hasSearch && hasTag) {
-      countResult = await sql`
-        SELECT COUNT(*)::int AS total FROM (
-          SELECT o.phone_normalized
-          FROM orders o
-          WHERE (o.customer_name ILIKE ${searchPattern} OR o.phone ILIKE ${searchPattern})
-            AND EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
-          GROUP BY o.phone_normalized
-        ) sub
-      `;
-      rows = await sql`
-        SELECT
-          o.phone_normalized,
-          MAX(o.customer_name) AS customer_name,
-          COUNT(*)::int AS total_orders,
-          SUM(o.total_amount)::real AS total_spent,
-          MIN(o.created_at) AS first_order,
-          MAX(o.created_at) AS last_order,
-          BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
-        FROM orders o
-        WHERE (o.customer_name ILIKE ${searchPattern} OR o.phone ILIKE ${searchPattern})
-          AND EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
-        GROUP BY o.phone_normalized
-        ORDER BY ${orderBy}
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-    } else if (hasSearch) {
-      countResult = await sql`
-        SELECT COUNT(*)::int AS total FROM (
-          SELECT phone_normalized FROM orders
-          WHERE customer_name ILIKE ${searchPattern} OR phone ILIKE ${searchPattern}
-          GROUP BY phone_normalized
-        ) sub
-      `;
-      rows = await sql`
-        SELECT
-          o.phone_normalized,
-          MAX(o.customer_name) AS customer_name,
-          COUNT(*)::int AS total_orders,
-          SUM(o.total_amount)::real AS total_spent,
-          MIN(o.created_at) AS first_order,
-          MAX(o.created_at) AS last_order,
-          BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
-        FROM orders o
-        WHERE o.customer_name ILIKE ${searchPattern} OR o.phone ILIKE ${searchPattern}
-        GROUP BY o.phone_normalized
-        ORDER BY ${orderBy}
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-    } else if (hasTag) {
-      countResult = await sql`
-        SELECT COUNT(*)::int AS total FROM (
-          SELECT o.phone_normalized
-          FROM orders o
-          WHERE EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
-          GROUP BY o.phone_normalized
-        ) sub
-      `;
-      rows = await sql`
-        SELECT
-          o.phone_normalized,
-          MAX(o.customer_name) AS customer_name,
-          COUNT(*)::int AS total_orders,
-          SUM(o.total_amount)::real AS total_spent,
-          MIN(o.created_at) AS first_order,
-          MAX(o.created_at) AS last_order,
-          BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
-        FROM orders o
-        WHERE EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})
-        GROUP BY o.phone_normalized
-        ORDER BY ${orderBy}
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-    } else {
-      countResult = await sql`
-        SELECT COUNT(*)::int AS total FROM (
-          SELECT phone_normalized FROM orders GROUP BY phone_normalized
-        ) sub
-      `;
-      rows = await sql`
-        SELECT
-          o.phone_normalized,
-          MAX(o.customer_name) AS customer_name,
-          COUNT(*)::int AS total_orders,
-          SUM(o.total_amount)::real AS total_spent,
-          MIN(o.created_at) AS first_order,
-          MAX(o.created_at) AS last_order,
-          BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
-          COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
-        FROM orders o
-        GROUP BY o.phone_normalized
-        ORDER BY ${orderBy}
-        LIMIT ${limit} OFFSET ${offset}
-      `;
+    const conditions = [];
+    if (hasSearch) {
+      conditions.push(sql`(o.customer_name ILIKE ${searchPattern} OR o.phone ILIKE ${searchPattern})`);
     }
+    if (hasTag) {
+      conditions.push(sql`EXISTS (SELECT 1 FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized AND cn.tags ILIKE ${tagPattern})`);
+    }
+    const where = conditions.length
+      ? conditions.slice(1).reduce((acc, c) => sql`${acc} AND ${c}`, sql`WHERE ${conditions[0]}`)
+      : sql``;
 
-    const total = countResult[0]?.total ?? 0;
-    const withSegments = rows.map((r) => ({
+    const selectCustomers = (limitClause) => sql`
+      SELECT
+        o.phone_normalized,
+        MAX(o.customer_name) AS customer_name,
+        COUNT(*)::int AS total_orders,
+        SUM(o.total_amount)::real AS total_spent,
+        MIN(o.created_at) AS first_order,
+        MAX(o.created_at) AS last_order,
+        BOOL_OR(o.messenger_psid IS NOT NULL) AS has_messenger,
+        COALESCE((SELECT string_agg(DISTINCT cn.tags, ',') FROM customer_notes cn WHERE cn.phone_normalized = o.phone_normalized), '') AS tags
+      FROM orders o
+      ${where}
+      GROUP BY o.phone_normalized
+      ORDER BY ${orderBy}
+      ${limitClause}
+    `;
+
+    const addSegment = (r) => ({
       ...r,
       segment: computeSegment({
         total_orders: Number(r.total_orders),
         total_spent: Number(r.total_spent),
         last_order: r.last_order,
       }),
-    }));
-    const filtered = hasSegment ? withSegments.filter((r) => r.segment === segmentFilter) : withSegments;
+    });
+
+    if (hasSegment) {
+      // ponytail: segment computed in JS (lib/segments.js), so fetch all matching
+      // rows and paginate in memory; move to SQL if the customer list gets large
+      const allRows = await selectCustomers(sql``);
+      const filtered = allRows.map(addSegment).filter((r) => r.segment === segmentFilter);
+      const total = filtered.length;
+      return res.status(200).json({
+        customers: filtered.slice(offset, offset + limit),
+        total,
+        page,
+        totalPages: Math.ceil(total / limit) || 1,
+      });
+    }
+
+    const countResult = await sql`
+      SELECT COUNT(*)::int AS total FROM (
+        SELECT o.phone_normalized FROM orders o
+        ${where}
+        GROUP BY o.phone_normalized
+      ) sub
+    `;
+    const rows = await selectCustomers(sql`LIMIT ${limit} OFFSET ${offset}`);
+    const total = countResult[0]?.total ?? 0;
     return res.status(200).json({
-      customers: filtered,
-      total: hasSegment ? filtered.length : total,
+      customers: rows.map(addSegment),
+      total,
       page,
-      totalPages: hasSegment ? 1 : Math.ceil(total / limit) || 1,
+      totalPages: Math.ceil(total / limit) || 1,
     });
   } catch (err) {
     console.error('Customer list query failed:', err);

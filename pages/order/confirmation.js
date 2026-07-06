@@ -6,6 +6,7 @@ import { trackPurchase } from '@/pages/_app';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
+import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 
 const DELIVERY_SLOT_LABELS = {
   pickup: 'Counter pickup',
@@ -65,8 +66,13 @@ export default function Confirmation() {
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10">
-        {loading && <p className="text-center text-gray-400">Loading order details...</p>}
-        {error && <p className="text-center text-red-500">{error}</p>}
+        {loading && (
+          <p className="text-center text-clay-muted" aria-busy="true">
+            <span className="clay-spinner inline-block align-middle mr-2" aria-hidden="true" />
+            Loading order details...
+          </p>
+        )}
+        {error && <p className="text-center text-red-500" role="alert">{error}</p>}
 
         {order && (
           <div className="space-y-4">
@@ -76,56 +82,56 @@ export default function Confirmation() {
               <p className="text-base font-bold text-clay-ink2 mt-2">⚠ Please write this down or take a screenshot — you&apos;ll need it to track your order.</p>
             </ClayCard>
 
-            <a href="tel:+639123456789" className="flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-3 text-base font-semibold text-clay-skydeep">
-              <ClayIcon name="phone" className="w-5 h-5" /> Questions? Call us: 0912-345-6789
+            <a href={`tel:${BUSINESS_PHONE_TEL}`} className="flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-3 text-base font-semibold text-clay-skydeep">
+              <ClayIcon name="phone" className="w-5 h-5" /> Questions? Call us: {BUSINESS_PHONE_DISPLAY}
             </a>
 
             <ClayCard className="p-6">
               <h2 className="font-editorial font-semibold text-clay-ink2 mb-3">Order Details</h2>
               <div className="space-y-2 text-base">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Status</span>
+                  <span className="text-clay-muted">Status</span>
                   <span className={`font-semibold px-2 py-0.5 rounded-full border text-xs ${status?.color}`}>{status?.label}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Name</span>
+                  <span className="text-clay-muted">Name</span>
                   <span className="font-medium">{order.customer_name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Phone</span>
+                  <span className="text-clay-muted">Phone</span>
                   <span className="font-medium">{order.phone}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Address</span>
+                  <span className="text-clay-muted">Address</span>
                   <span className="font-medium text-right max-w-[60%]">{order.address}, {order.barangay}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Product</span>
+                  <span className="text-clay-muted">Product</span>
                   <span className="font-medium">{order.product_type} ({order.container_size})</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Quantity</span>
+                  <span className="text-clay-muted">Quantity</span>
                   <span className="font-medium">{order.quantity} refill(s)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Payment</span>
+                  <span className="text-clay-muted">Payment</span>
                   <span className="font-medium capitalize">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method}</span>
                 </div>
                 {order.delivery_slot && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Delivery Time</span>
+                    <span className="text-clay-muted">Delivery Time</span>
                     <span className="font-medium">{DELIVERY_SLOT_LABELS[order.delivery_slot] || order.delivery_slot}{order.delivery_date ? ` · ${order.delivery_date}` : ''}</span>
                   </div>
                 )}
                 {order.has_empty_containers ? (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Pickup</span>
+                    <span className="text-clay-muted">Pickup</span>
                     <span className="font-medium">{order.pickup_date} {order.pickup_time}</span>
                   </div>
                 ) : null}
                 {order.delivery_time && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Delivery</span>
+                    <span className="text-clay-muted">Delivery</span>
                     <span className="font-medium">{order.delivery_date_new} {order.delivery_time}</span>
                   </div>
                 )}

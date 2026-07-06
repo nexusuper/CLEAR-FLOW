@@ -43,9 +43,10 @@ export default function Rewards() {
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
         <form onSubmit={handleSubmit} className="clay-raised rounded-3xl p-6">
-          <label className="block text-base font-semibold text-clay-ink2 mb-2">Your Phone Number</label>
+          <label htmlFor="rewards_phone" className="block text-base font-semibold text-clay-ink2 mb-2">Your Phone Number</label>
           <div className="flex gap-2">
             <input
+              id="rewards_phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="09XX-XXX-XXXX"
@@ -54,12 +55,12 @@ export default function Rewards() {
               autoComplete="tel"
               className="clay-input flex-1 text-lg"
             />
-            <button type="submit" disabled={loading}
+            <button type="submit" disabled={loading} aria-busy={loading || undefined}
                     className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60">
-              {loading ? '...' : 'Check'}
+              {loading ? <span className="clay-spinner" aria-hidden="true" /> : 'Check'}
             </button>
           </div>
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+          {error && <p className="text-red-500 text-sm mt-2" role="alert">{error}</p>}
         </form>
 
         {data && (

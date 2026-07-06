@@ -11,8 +11,9 @@ export default function Layout({ children, title = 'Clear Flow — Pure Water De
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <div className="min-h-screen flex flex-col bg-clay-bg">
+        <a href="#main" className="skip-link">Skip to content</a>
         <Navbar />
-        <main className="flex-1">{children}</main>
+        <main id="main" className="flex-1">{children}</main>
         <Footer />
       </div>
     </>

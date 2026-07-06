@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
+import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 
 const STEPS = [
   { key: 'pending', label: 'Order Received', icon: 'clipboard', desc: 'Your order is in our queue.' },
@@ -122,10 +123,11 @@ export default function Track() {
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
         {/* Search form */}
         <form onSubmit={handleSubmit} className="clay-raised rounded-3xl p-6">
-          <label className="block text-base font-semibold text-clay-ink2 mb-2">Order ID</label>
+          <label htmlFor="order_id" className="block text-base font-semibold text-clay-ink2 mb-2">Order ID</label>
           <p className="text-sm text-clay-muted mb-2">This is the code shown when you placed your order and in your Messenger confirmation.</p>
           <div className="flex gap-2">
             <input
+              id="order_id"
               value={inputId}
               onChange={(e) => setInputId(e.target.value.toUpperCase())}
               placeholder="e.g. A1B2C3D4"
@@ -135,14 +137,15 @@ export default function Track() {
             <button
               type="submit"
               disabled={loading}
+              aria-busy={loading || undefined}
               className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60"
             >
-              {loading ? '...' : 'Track'}
+              {loading ? <span className="clay-spinner" aria-hidden="true" /> : 'Track'}
             </button>
           </div>
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-          <a href="tel:+639123456789" className="mt-4 flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-2.5 text-sm font-semibold text-clay-skydeep">
-            <ClayIcon name="phone" className="w-4 h-4" /> Can&apos;t find your Order ID? Call us: 0912-345-6789
+          {error && <p className="text-red-500 text-sm mt-2" role="alert">{error}</p>}
+          <a href={`tel:${BUSINESS_PHONE_TEL}`} className="mt-4 flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-2.5 text-sm font-semibold text-clay-skydeep">
+            <ClayIcon name="phone" className="w-4 h-4" /> Can&apos;t find your Order ID? Call us: {BUSINESS_PHONE_DISPLAY}
           </a>
         </form>
 
@@ -172,7 +175,7 @@ export default function Track() {
               <StatusStepper status={order.status} />
 
               {lastUpdated && (
-                <p className="text-xs text-gray-300 text-right mt-4">
+                <p className="text-xs text-clay-muted text-right mt-4">
                   Last updated: {lastUpdated.toLocaleTimeString()}
                   {order.status !== 'delivered' && order.status !== 'cancelled' && ' · Auto-refreshes every 30s'}
                 </p>
@@ -181,7 +184,7 @@ export default function Track() {
 
             {(order.status !== 'delivered' && order.status !== 'cancelled') && (
               <div className="clay-inset rounded-3xl p-4 text-clay-skydeep text-sm text-center">
-                <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> Questions about your order? Call us at <strong>0912-345-6789</strong>
+                <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> Questions about your order? Call us at <strong>{BUSINESS_PHONE_DISPLAY}</strong>
               </div>
             )}
 

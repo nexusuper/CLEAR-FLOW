@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
-import { PRODUCTS, deliveryFee } from '@/lib/products';
+import { PRODUCTS, deliveryFee, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 import {
   classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule,
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
@@ -115,6 +115,14 @@ export default function Order() {
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
+  // PH mobile: 11 digits starting 09 (or 12 starting 639 from +63 format)
+  const isPhMobile = (raw) => {
+    const d = normalizePhone(raw);
+    return /^09\d{9}$/.test(d) || /^639\d{9}$/.test(d);
+  };
+  const phoneInvalid = form.phone.trim().length > 0 && !isPhMobile(form.phone);
+  const gcashInvalid = form.payment_method === 'gcash' && form.gcash_number.trim().length > 0 && !isPhMobile(form.gcash_number);
+
   const today = new Date().toISOString().slice(0, 10);
   const pickupSlot = classifyPickupTime(form.pickup_time);
   const showAfternoonNotice = form.has_empty_containers && pickupSlot === 'afternoon';
@@ -190,6 +198,14 @@ export default function Order() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (!isPhMobile(form.phone)) {
+      setError('Please enter a valid PH mobile number (09XX-XXX-XXXX).');
+      return;
+    }
+    if (form.payment_method === 'gcash' && !isPhMobile(form.gcash_number)) {
+      setError('Please enter a valid GCash mobile number (09XX-XXX-XXXX).');
+      return;
+    }
     if (!scheduleCheck.ok) {
       setError(scheduleCheck.error);
       return;
@@ -229,8 +245,8 @@ export default function Order() {
           Place Your <span style={{ color: '#0ea5e9' }}>Order.</span>
         </h1>
         <p className="text-clay-muted font-semibold mt-3 text-base">No account needed — just fill the form below.</p>
-        <a href="tel:+639123456789" className="mt-4 inline-flex items-center gap-2 clay-raised-sm rounded-full px-4 py-2.5 text-base font-semibold text-clay-skydeep clay-pressable">
-          <ClayIcon name="phone" className="w-5 h-5" /> Need help? Call us: 0912-345-6789
+        <a href={`tel:${BUSINESS_PHONE_TEL}`} className="mt-4 inline-flex items-center gap-2 clay-raised-sm rounded-full px-4 py-2.5 text-base font-semibold text-clay-skydeep clay-pressable">
+          <ClayIcon name="phone" className="w-5 h-5" /> Need help? Call us: {BUSINESS_PHONE_DISPLAY}
         </a>
       </section>
 
@@ -242,20 +258,21 @@ export default function Order() {
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Your Information</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-1">Full Name *</label>
-                <input required value={form.customer_name} onChange={(e) => set('customer_name', e.target.value)} className="clay-input" placeholder="Juan Dela Cruz" autoComplete="name" />
+                <label htmlFor="customer_name" className="block text-sm font-medium text-clay-ink2 mb-1">Full Name *</label>
+                <input id="customer_name" required value={form.customer_name} onChange={(e) => set('customer_name', e.target.value)} className="clay-input" placeholder="Juan Dela Cruz" autoComplete="name" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-1">Phone Number *</label>
-                <input required type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                <label htmlFor="phone" className="block text-sm font-medium text-clay-ink2 mb-1">Phone Number *</label>
+                <input id="phone" required type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                {phoneInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-1">Street Address *</label>
-                <input required value={form.address} onChange={(e) => set('address', e.target.value)} className="clay-input" placeholder="123 Rizal St." autoComplete="street-address" />
+                <label htmlFor="address" className="block text-sm font-medium text-clay-ink2 mb-1">Street Address *</label>
+                <input id="address" required value={form.address} onChange={(e) => set('address', e.target.value)} className="clay-input" placeholder="123 Rizal St." autoComplete="street-address" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-1">Barangay *</label>
-                <input required value={form.barangay} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" autoComplete="address-level3" />
+                <label htmlFor="barangay" className="block text-sm font-medium text-clay-ink2 mb-1">Barangay *</label>
+                <input id="barangay" required value={form.barangay} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" autoComplete="address-level3" />
               </div>
             </div>
           </ClayCard>
@@ -354,8 +371,8 @@ export default function Order() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-1">Quantity (refills) *</label>
-                <input type="number" min="1" max="50" required value={form.quantity} onChange={(e) => set('quantity', parseInt(e.target.value) || 1)} className="clay-input" />
+                <label htmlFor="quantity" className="block text-sm font-medium text-clay-ink2 mb-1">Quantity (refills) *</label>
+                <input id="quantity" type="number" min="1" max="50" required value={form.quantity} onChange={(e) => set('quantity', parseInt(e.target.value) || 1)} className="clay-input" />
               </div>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -365,8 +382,8 @@ export default function Order() {
 
               {form.need_container && (
                 <div>
-                  <label className="block text-sm font-medium text-clay-ink2 mb-1">Number of containers *</label>
-                  <input type="number" min="1" max="10" value={form.container_quantity} onChange={(e) => set('container_quantity', parseInt(e.target.value) || 1)} className="clay-input" />
+                  <label htmlFor="container_quantity" className="block text-sm font-medium text-clay-ink2 mb-1">Number of containers *</label>
+                  <input id="container_quantity" type="number" min="1" max="10" value={form.container_quantity} onChange={(e) => set('container_quantity', parseInt(e.target.value) || 1)} className="clay-input" />
                 </div>
               )}
             </div>
@@ -392,14 +409,15 @@ export default function Order() {
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
                 {form.payment_method === 'gcash' ? (
                   <>
-                    <p className="text-sm text-clay-ink2">Send payment to GCash: <strong>0912-345-6789</strong> (Clear Flow)</p>
+                    <p className="text-sm text-clay-ink2">Send payment to GCash: <strong>{BUSINESS_PHONE_DISPLAY}</strong> (Clear Flow)</p>
                     <div className="flex flex-col items-center gap-2 py-2">
                       <img src="/payment/gcash-qr.jpeg" alt="Clear Flow GCash QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
                       <p className="text-xs text-clay-muted font-semibold">Scan with your GCash app to pay directly</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-clay-ink2 mb-1">Your GCash Number *</label>
-                      <input required type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                      <label htmlFor="gcash_number" className="block text-sm font-medium text-clay-ink2 mb-1">Your GCash Number *</label>
+                      <input id="gcash_number" required type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                      {gcashInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
                     </div>
                   </>
                 ) : (
@@ -412,13 +430,14 @@ export default function Order() {
                   </>
                 )}
                 <div>
-                  <label className="block text-sm font-medium text-clay-ink2 mb-1">Reference Number (after payment)</label>
-                  <input value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} className="clay-input" placeholder="Optional, fill after sending" />
+                  <label htmlFor="reference_number" className="block text-sm font-medium text-clay-ink2 mb-1">Reference Number (after payment)</label>
+                  <input id="reference_number" value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} className="clay-input" placeholder="Optional, fill after sending" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-clay-ink2 mb-1">Attach Screenshot of Payment (optional)</label>
+                  <label htmlFor="payment_screenshot" className="block text-sm font-medium text-clay-ink2 mb-1">Attach Screenshot of Payment (optional)</label>
                   {!form.payment_screenshot ? (
                     <input
+                      id="payment_screenshot"
                       type="file"
                       accept="image/*"
                       onChange={async (e) => {
@@ -482,12 +501,13 @@ export default function Order() {
               {form.has_empty_containers ? (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
-                    <input required type="date" min={today} value={form.pickup_date} onChange={(e) => set('pickup_date', e.target.value)} className="clay-input" />
+                    <label htmlFor="pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
+                    <input id="pickup_date" required type="date" min={today} value={form.pickup_date} onChange={(e) => set('pickup_date', e.target.value)} className="clay-input" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
+                    <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
                     <input
+                      id="pickup_time"
                       required
                       type="time"
                       min={PICKUP_MORNING_START}
@@ -511,12 +531,13 @@ export default function Order() {
                   {allowedDelivery && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
-                        <input type="date" value={allowedDelivery.date} readOnly disabled className="clay-input opacity-70" />
+                        <label htmlFor="delivery_date_locked" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
+                        <input id="delivery_date_locked" type="date" value={allowedDelivery.date} readOnly disabled className="clay-input opacity-70" />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
+                        <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
                         <input
+                          id="delivery_time"
                           required
                           type="time"
                           min={allowedDelivery.minTime}
@@ -533,12 +554,12 @@ export default function Order() {
               ) : (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
-                    <input required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
+                    <label htmlFor="delivery_date" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
+                    <input id="delivery_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                    <input required type="time" min={DELIVERY_ONLY_START} max={DELIVERY_ONLY_END} value={form.delivery_time} onChange={(e) => set('delivery_time', e.target.value)} className="clay-input" />
+                    <label htmlFor="delivery_time_only" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
+                    <input id="delivery_time_only" required type="time" min={DELIVERY_ONLY_START} max={DELIVERY_ONLY_END} value={form.delivery_time} onChange={(e) => set('delivery_time', e.target.value)} className="clay-input" />
                     <p className="text-xs text-clay-muted mt-1">Allowed: {DELIVERY_ONLY_START}–{DELIVERY_ONLY_END}.</p>
                   </div>
                 </>
@@ -553,7 +574,8 @@ export default function Order() {
           {/* Notes */}
           <ClayCard className="p-6">
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Additional Notes</h2>
-            <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={3} className="clay-input" placeholder="Delivery instructions, landmarks, etc." />
+            <label htmlFor="order_notes" className="sr-only">Additional notes</label>
+            <textarea id="order_notes" value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={3} className="clay-input" placeholder="Delivery instructions, landmarks, etc." />
           </ClayCard>
 
           {/* Order Summary */}

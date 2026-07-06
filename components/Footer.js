@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import ClayIcon from './ui/ClayIcon';
+import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 
 const QUICK_LINKS = [
   { href: '/', label: 'Home' },
@@ -50,8 +51,8 @@ export default function Footer() {
             </h4>
             <ul className="space-y-3">
               <li>
-                <a href="tel:+639123456789" className="flex items-center gap-2.5 text-base font-bold text-clay-skydeep hover:underline">
-                  <ClayIcon name="phone" className="w-4 h-4 text-clay-sky shrink-0" /> 0912-345-6789
+                <a href={`tel:${BUSINESS_PHONE_TEL}`} className="flex items-center gap-2.5 text-base font-bold text-clay-skydeep hover:underline">
+                  <ClayIcon name="phone" className="w-4 h-4 text-clay-sky shrink-0" /> {BUSINESS_PHONE_DISPLAY}
                 </a>
               </li>
               <li className="flex items-center gap-2.5 text-sm font-semibold text-clay-muted">

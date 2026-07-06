@@ -43,7 +43,29 @@ h1, h2, h3, .font-display {
   box-shadow: inset 4px 4px 8px #bcd7e8, inset -4px -4px 8px #ffffff;
 }
 
+/* ---------- Skip link (keyboard users) ---------- */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 100;
+  background: var(--color-clay-surface);
+  color: var(--color-clay-skydeep);
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+.skip-link:focus-visible {
+  left: 1rem;
+  top: 1rem;
+}
+
 /* ---------- Clay buttons / pressables ---------- */
+.clay-btn-primary:focus-visible,
+.clay-btn-white:focus-visible,
+.clay-pressable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.6);
+}
 .clay-pressable { transition: transform 0.15s ease; }
 .clay-pressable:active { transform: scale(0.95); }
 @media (prefers-reduced-motion: reduce) {
