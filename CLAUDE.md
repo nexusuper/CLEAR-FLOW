@@ -19,7 +19,12 @@ npm run render:video    # Render public/purify-process.mp4
 npm run render:poster   # Render public/purify-process-poster.jpg
 ```
 
-No test framework is configured.
+No test framework is configured. `scripts/` has a couple of plain-Node assertion scripts, run directly:
+
+```bash
+node scripts/loyalty.test.mjs
+node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
+```
 
 ## Architecture
 
@@ -43,7 +48,7 @@ No test framework is configured.
 - `pages/track.js` — order tracking by phone
 - `pages/rewards.js` — loyalty rewards lookup
 - `pages/products.js` — product catalog
-- `pages/admin/index.js` — admin panel (client-rendered via `next/dynamic`, no SSR)
+- `pages/admin/index.js` — admin panel entry (client-rendered via `next/dynamic`, no SSR), renders `components/AdminPanel.js` — orders, customers/CRM, inventory, and the POS counter-sale flow (`components/admin/POSPanel.js`) all live inside this one client component
 
 ### API routes (`pages/api/`)
 
@@ -53,11 +58,20 @@ Public routes follow: `initDb()` → rate limit → Zod validation → SQL. Admi
 - `orders/[id].js` — single order read/update/delete
 - `orders/[id]/apply-reward.js` — apply loyalty voucher to order
 - `orders/bulk-delete.js` — batch delete delivered/cancelled orders
+- `orders/pos.js` — create an in-person counter sale (POS), bypasses the public order rate limit
+- `orders/route.js` — admin GET listing of all orders (despite the App-Router-style filename, this is a Pages Router route served at `/api/orders/route`)
 - `customers/index.js` — paginated customer list with search/sort
 - `customers/[phone].js` — single customer detail
 - `customers/[phone]/notes/` — CRUD for customer notes
 - `customers/[phone]/contact-log.js` — contact log entries
+- `customers/[phone]/container-adjust.js` — manual adjustment of a customer's returnable-container balance
+- `customers/[phone]/message.js` — send an ad-hoc Messenger message to a customer
 - `customers/stats.js` — aggregate customer statistics
+- `customers/reorders.js` — customers due/overdue for reorder, from `lib/reorder.js` cadence logic
+- `customers/tags.js` — customer segment tags, from `lib/segments.js`
+- `customers/export.js` — CSV export of customers
+- `dashboard.js` — aggregate admin dashboard metrics
+- `inventory/index.js` / `inventory/adjust.js` / `inventory/restock.js` — stock levels, manual adjustments, restocking
 - `rewards.js` — loyalty balance lookup
 - `rewards/send-code.js` / `rewards/verify-code.js` — OTP-based reward code flow
 - `notify.js` / `messenger-notify.js` — order status notifications via Messenger
@@ -73,6 +87,10 @@ Public routes follow: `initDb()` → rate limit → Zod validation → SQL. Admi
 - `facebook.js` — Messenger Send API helpers + webhook signature verification
 - `products.js` — product catalog constants and delivery fee schedule
 - `rate-limit.js` — in-memory per-IP rate limiter
+- `inventory.js` — builds the stock-deduction + inventory-log queries for an order sale, meant to run inside a `sql.transaction([...])` for atomicity
+- `notifications.js` — per-order-status Messenger message templates, shared by manual and automatic notify flows
+- `reorder.js` — pure, isomorphic reorder-cadence logic (needs ≥2 orders with timestamps to compute a customer's due/overdue status)
+- `segments.js` — isomorphic customer segment definitions (new/regular/vip/at-risk/churned) used by both API and UI
 
 ### Design system
 
@@ -101,7 +119,11 @@ See `.env.example` for all required vars. Key ones:
 
 ### Remotion video assets
 
-The purification process animation (`public/purify-process.mp4` + `public/purify-process-poster.jpg`) is rendered from `remotion/index.ts`. Edit the composition there and re-run `npm run render:video` to update the asset. `components/PurifyVideo.js` plays it as a muted, looped, motion-safe native `<video>`.
+The purification process animation (`public/purify-process.mp4` + `public/purify-process-poster.jpg`) is rendered from `remotion/WaterRefillProcess.tsx` (registered in `remotion/Root.tsx`, entry `remotion/index.ts`; scene timings/colors/video dimensions live in `remotion/theme.ts`). Edit the composition there and re-run `npm run render:video` / `npm run render:poster` to update the assets.
+
+This rendered asset is **not** currently wired into any page — `components/PurifyProcess.js` (used on the homepage) is a separate, pure CSS/SVG stage animation with no video. `components/VideoShowcase.js` is the component that renders a native `<video>`, but it points at `public/brand-video.mp4`, an unrelated asset. If you re-render the Remotion video and want it live on the site, you must manually point a `<video src>` (e.g. in `VideoShowcase.js`) at `/purify-process.mp4`.
+
+`remotion-video/` (repo root, separate from `remotion/`) is an unrelated, unused default `create-video` scaffold — do not confuse it with the real pipeline above.
 
 ### Currency
 
