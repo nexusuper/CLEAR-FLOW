@@ -10,26 +10,26 @@ import { PRODUCTS } from '@/lib/products';
 
 const features = [
   {
-    icon: 'bolt',
-    title: 'Order in Under 2 Minutes',
-    desc: 'No login, no app to download. Fill a quick form and we handle the rest — same-day if you order before 11AM.',
+    icon: 'lock',
+    title: 'No Login Required',
+    desc: 'Order as a guest. We just need your name, address, and phone number — done in under 2 minutes.',
   },
   {
-    icon: 'lock',
-    title: 'Live Order Tracking',
-    desc: 'Know exactly where your delivery is. Track any order anytime by phone number — no account required.',
+    icon: 'bolt',
+    title: 'Same-Day Delivery',
+    desc: 'Order before 11AM and get your water delivered today anywhere within your area.',
   },
   {
     icon: 'filter',
-    title: 'Free Refill Vouchers',
-    desc: 'Every order earns loyalty rewards. Rack up free gallons automatically just by ordering the way you already do.',
+    title: 'Pure & Safe Water',
+    desc: 'Multi-stage filtration and UV sterilization guarantee the cleanest water for your family.',
   },
 ];
 
 const stats = [
   { num: '500+', label: 'Happy Households' },
   { num: 'Same Day', label: 'Delivery Available' },
-  { num: 'Free', label: 'Refill Vouchers' },
+  { num: '5-Stage', label: 'Purification' },
 ];
 
 function Jug() {
@@ -45,7 +45,7 @@ function Jug() {
 
 export default function Home() {
   return (
-    <Layout title="Clear Flow — Scheduled Water Delivery, Tracked & Rewarded">
+    <Layout title="Clear Flow — Pure Water Delivery">
       <AnimatedHero />
 
       {/* Stats bar */}
@@ -67,10 +67,10 @@ export default function Home() {
           <div className="reveal lg:sticky lg:top-28">
             <span className="section-pill mb-5 inline-block">Why Clear Flow</span>
             <h2 className="font-editorial text-4xl md:text-5xl font-bold text-clay-ink leading-[1.08] mb-4">
-              Convenience,<br />built in.
+              Water quality<br />you can trust.
             </h2>
             <p className="text-clay-muted font-semibold text-base leading-relaxed max-w-[42ch]">
-              Set it and forget it — schedule recurring orders, track every delivery live, and let free refill vouchers stack up on their own.
+              We go beyond ordinary water refills — every drop is filtered, tested, and delivered with care.
             </p>
             <div className="mt-8">
               <ClayButton href="/order">Order Today</ClayButton>
@@ -136,10 +136,10 @@ export default function Home() {
         <div className="reveal max-w-6xl mx-auto rounded-[2rem] px-8 md:px-14 py-16 flex flex-col items-center text-center gap-6 clay-raised">
           <span className="section-pill">Ready to Order?</span>
           <h2 className="font-editorial text-4xl md:text-5xl font-bold text-clay-ink leading-[1.08] max-w-xl">
-            Water on your schedule, not the other way around.
+            Pure water, delivered the same day.
           </h2>
           <p className="text-clay-muted font-semibold text-base max-w-md">
-            No account, no hassle. Order, track it live, and earn a free refill voucher every time.
+            No account, no hassle. Fill the form and we handle the rest.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <ClayButton href="/order" size="lg">Place Your Order</ClayButton>
