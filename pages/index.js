@@ -48,6 +48,17 @@ export default function Home() {
     <Layout title="Clear Flow — Scheduled Water Delivery, Tracked & Rewarded">
       <AnimatedHero />
 
+      {/* Trust badges */}
+      <section className="max-w-6xl mx-auto px-4 pb-8">
+        <div className="reveal flex flex-wrap justify-center gap-x-6 gap-y-2">
+          {['FDA Registered', 'Safe Drinking Water', 'Same Day Delivery', 'Cash on Delivery'].map((t) => (
+            <span key={t} className="inline-flex items-center gap-1.5 text-sm font-bold text-clay-ink2">
+              <ClayIcon name="check" className="w-4 h-4 text-clay-skydeep" /> {t}
+            </span>
+          ))}
+        </div>
+      </section>
+
       {/* Stats bar */}
       <section className="max-w-6xl mx-auto px-4 pb-12">
         <div className="reveal clay-raised rounded-2xl px-6 py-5 grid grid-cols-3 divide-x divide-sky-100">
@@ -72,6 +83,12 @@ export default function Home() {
             <p className="text-clay-muted font-semibold text-base leading-relaxed max-w-[42ch]">
               Set it and forget it — schedule recurring orders, track every delivery live, and let free refill vouchers stack up on their own.
             </p>
+            <ul className="mt-6 space-y-2.5 text-base font-bold text-clay-skydeep">
+              <li>💧 Safe &amp; Purified</li>
+              <li>🚚 Fast Delivery</li>
+              <li>💙 Friendly Service</li>
+              <li>💳 Cash · GCash · Bank Transfer</li>
+            </ul>
             <div className="mt-8">
               <ClayButton href="/order">Order Today</ClayButton>
             </div>
@@ -145,6 +162,7 @@ export default function Home() {
             <ClayButton href="/order" size="lg">Place Your Order</ClayButton>
             <ClayButton href="/track" variant="outline" size="lg">Track an Order</ClayButton>
           </div>
+          <p className="text-sm font-bold text-clay-skydeep">💧 Free refill after 10 gallons — every order counts.</p>
         </div>
       </section>
 

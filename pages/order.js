@@ -375,10 +375,26 @@ export default function Order() {
                 <input id="quantity" type="number" min="1" max="50" required value={form.quantity} onChange={(e) => set('quantity', parseInt(e.target.value) || 1)} className="clay-input" />
               </div>
 
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.need_container} onChange={(e) => set('need_container', e.target.checked)} className="w-4 h-4 accent-sky-500" />
-                <span className="text-sm text-clay-ink">I also need a new container (+₱{selectedProduct.container} each)</span>
-              </label>
+              <div>
+                <label className="block text-sm font-medium text-clay-ink2 mb-2">Need a new gallon?</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: false, label: 'No' },
+                    { id: true, label: `Yes (+₱${selectedProduct.container} each)` },
+                  ].map((opt) => (
+                    <label key={String(opt.id)} className={`flex items-center justify-center rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.need_container === opt.id ? 'clay-tile-selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="need_container"
+                        checked={form.need_container === opt.id}
+                        onChange={() => set('need_container', opt.id)}
+                        className="accent-clay-sky mr-2"
+                      />
+                      <span className="font-semibold text-clay-ink">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
 
               {form.need_container && (
                 <div>
@@ -593,7 +609,7 @@ export default function Order() {
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-clay-muted">Delivery fee</span>
+                <span className="text-clay-muted">🚚 Delivery Fee <span className="text-xs">(within service area)</span></span>
                 <span className="font-medium">{delivery === 0 ? 'FREE' : `₱${delivery}`}</span>
               </div>
               {voucherDiscount > 0 && (
@@ -618,6 +634,8 @@ export default function Order() {
           {error && (
             <div className="bg-clay-danger-bg border border-red-200 text-clay-danger rounded-xl px-4 py-3 text-sm" role="alert">{error}</div>
           )}
+
+          <p className="text-center text-sm font-semibold text-clay-skydeep">💧 Free refill after 10 gallons — earned automatically on every order.</p>
 
           <button type="submit" disabled={loading} aria-busy={loading || undefined} className="w-full inline-flex items-center justify-center gap-2 clay-btn-primary clay-pressable rounded-full py-4 text-lg font-editorial font-semibold disabled:opacity-60">
             {loading ? (
