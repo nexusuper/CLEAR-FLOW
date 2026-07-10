@@ -24,7 +24,7 @@ const OrderSchema = z.object({
   payment_method: z.enum(['cod', 'gcash', 'bank_transfer']),
   gcash_number: z.string().max(20).optional().nullable(),
   reference_number: z.string().max(100).optional().nullable(),
-  payment_screenshot: z.string().max(2_000_000).optional().nullable(),
+  payment_screenshot: z.string().startsWith('data:image/').max(2_000_000).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   total_amount: z.coerce.number().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
@@ -167,8 +167,18 @@ export default async function handler(req, res) {
         const nowIso = new Date().toISOString();
         if (row && row.expires_at > nowIso && row.attempts < CODE_MAX_ATTEMPTS) {
           if (timingSafeEqual(row.code_hash, hashCode(normPhone, String(reward_code)))) {
-            await sql`UPDATE reward_codes SET used = 1 WHERE id = ${row.id}`;
-            voucher_count = Math.min(requested, available);
+            // Atomic claim: WHERE used = 0 guards against two concurrent
+            // orders spending the same code (double voucher grant).
+            const claimed = await sql`
+              UPDATE reward_codes SET used = 1
+              WHERE id = ${row.id} AND used = 0
+              RETURNING id
+            `;
+            if (claimed.length > 0) {
+              voucher_count = Math.min(requested, available);
+            } else {
+              reward_requested_store = requested;
+            }
           } else {
             await sql`UPDATE reward_codes SET attempts = attempts + 1 WHERE id = ${row.id}`;
             reward_requested_store = requested;
