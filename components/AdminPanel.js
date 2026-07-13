@@ -633,9 +633,9 @@ export default function AdminPanel() {
                           <td className="px-4 py-3">
                             <div className="uppercase text-xs font-semibold text-gray-600">{o.payment_method === 'bank_transfer' ? 'BANK TRANSFER' : o.payment_method}</div>
                             {o.reference_number && <div className="text-gray-400 text-xs">Ref: {o.reference_number}</div>}
-                            {o.payment_screenshot && (
-                              <a href={o.payment_screenshot} target="_blank" rel="noopener noreferrer" className="inline-block mt-1">
-                                <img src={o.payment_screenshot} alt="Payment screenshot" className="w-10 h-10 object-cover rounded-lg border border-gray-200 hover:opacity-80" />
+                            {o.payment_screenshot_path && (
+                              <a href={o.payment_screenshot_path} target="_blank" rel="noopener noreferrer" className="inline-block mt-1">
+                                <img src={o.payment_screenshot_path} alt="Payment screenshot" className="w-10 h-10 object-cover rounded-lg border border-gray-200 hover:opacity-80" />
                               </a>
                             )}
                             {(o.payment_method === 'gcash' || o.payment_method === 'bank_transfer') && (
