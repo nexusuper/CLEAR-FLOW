@@ -12,7 +12,6 @@
     "render:poster": "remotion still remotion/index.ts Poster public/purify-process-poster.jpg --image-format=jpeg"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.1.0",
     "@supabase/supabase-js": "^2.110.2",
     "next": "16.2.7",
     "react": "19.2.4",
