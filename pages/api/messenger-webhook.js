@@ -118,6 +118,11 @@ async function handleMessage(senderPsid, messageText) {
         await supabase.from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
       }
       await sendMessengerMessage(senderPsid, `Got it — your order is linked. Current status: ${order.status}.`);
+    } else {
+      await sendReply(senderPsid,
+        `❌ Sorry, I couldn't find order #${orderId}.\n\n` +
+        `Please double-check the Order ID from your confirmation page and try again.`
+      );
     }
     return;
   }
