@@ -16,10 +16,13 @@ export default async function handler(req, res) {
 
     const today = new Date();
     const monthPrefix = today.toISOString().slice(0, 7);
-    const total = rows.length;
+    const totalCustomers = rows.length;
     const activeThisMonth = rows.filter((r) => (r.last_order || '').slice(0, 7) === monthPrefix).length;
     const newThisMonth = rows.filter((r) => (r.first_order || '').slice(0, 7) === monthPrefix).length;
-    const topSpender = [...rows].sort((a, b) => Number(b.total_spent) - Number(a.total_spent))[0] || null;
+    const topSpenderRow = [...rows].sort((a, b) => Number(b.total_spent) - Number(a.total_spent))[0] || null;
+    const topSpender = topSpenderRow
+      ? { name: topSpenderRow.customer_name, phone: topSpenderRow.phone_normalized, total_spent: topSpenderRow.total_spent }
+      : null;
 
     const segmentCounts = {};
     for (const r of rows) {
@@ -27,7 +30,7 @@ export default async function handler(req, res) {
       segmentCounts[seg] = (segmentCounts[seg] || 0) + 1;
     }
 
-    return res.status(200).json({ total, activeThisMonth, newThisMonth, topSpender, segmentCounts });
+    return res.status(200).json({ totalCustomers, activeThisMonth, newThisMonth, topSpender, segmentCounts });
   } catch (err) {
     console.error('Customer stats query failed:', err);
     return res.status(500).json({ error: 'Failed to load stats' });
