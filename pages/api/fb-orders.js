@@ -1,9 +1,8 @@
-import { initDb } from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
+import { getSupabase } from '@/lib/supabaseAdmin';
+import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { rateLimit } from '@/lib/rate-limit';
 import { timingSafeEqual } from '@/lib/auth';
-import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
-import { normalizePhone } from '@/lib/loyalty';
+import { PRODUCTS_BY_ID } from '@/lib/products';
 import { z } from 'zod';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 10 });
@@ -29,8 +28,6 @@ const FbOrderSchema = z.object({
   delivery_slot: z.enum(['am', 'pm']).optional(),
 });
 
-
-// Pull the first integer out of values like "10", "10 gallons", or 10.
 function parseGallons(v) {
   const m = String(v ?? '').match(/\d+/);
   return m ? parseInt(m[0], 10) : 0;
@@ -51,14 +48,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  let sql;
-  try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
-
   const parsed = FbOrderSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid request data' });
@@ -77,44 +66,52 @@ export default async function handler(req, res) {
   }
 
   const product = PRODUCTS_BY_ID[productKey];
-  // The flow asks for total gallons; convert to whole containers of the size.
   const perContainer = product.size === '3-Gal' ? 3 : 5;
   const quantity = Math.max(1, Math.round(gallons / perContainer));
-  const subtotal = quantity * product.refill;
-  const total_amount = subtotal + deliveryFee(quantity);
-
-  const id = uuidv4().slice(0, 8).toUpperCase();
-  const created_at = new Date().toISOString();
   const notes =
     `Ordered via Facebook Messenger (${gallons} gal requested)` +
     (b.notes ? ` — ${b.notes}` : '');
 
-  try {
-    await sql`
-      INSERT INTO orders (
-        id, customer_name, phone, address, barangay,
-        product_type, container_size, quantity,
-        need_container, container_quantity,
-        payment_method, gcash_number, reference_number,
-        notes, total_amount, created_at, messenger_psid,
-        voucher_count, voucher_discount, reward_requested,
-        phone_normalized, delivery_slot
-      ) VALUES (
-        ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
-        ${productKey}, ${product.size}, ${quantity},
-        ${0}, ${0},
-        ${'cod'}, ${null}, ${null},
-        ${notes}, ${total_amount}, ${created_at}, ${messenger_psid},
-        ${0}, ${0}, ${0},
-        ${normalizePhone(phone)}, ${b.delivery_slot || null}
-      )
-    `;
-  } catch (err) {
-    console.error('FB order insert failed:', err);
+  const supabase = getSupabase();
+  const { data: order, error } = await supabase.rpc('create_order', {
+    p_client_order_id: crypto.randomUUID(),
+    p_branch_id: DEFAULT_BRANCH_ID,
+    p_customer_name: customer_name,
+    p_phone: phone,
+    p_address: address,
+    p_barangay: barangay,
+    p_address_label: 'Home',
+    p_product_type: productKey,
+    p_container_size: product.size,
+    p_quantity: quantity,
+    p_need_container: false,
+    p_container_quantity: 0,
+    p_payment_method: 'cod',
+    p_gcash_number: null,
+    p_reference_number: null,
+    p_payment_screenshot_path: null,
+    p_notes: notes,
+    p_total_amount: 0,
+    p_sale_channel: 'online',
+    p_cash_tendered: null,
+    p_voucher_count: 0,
+    p_reward_requested: 0,
+  });
+
+  if (error) {
+    console.error('FB order insert failed:', error);
     return res.status(500).json({ error: 'Failed to place order' });
+  }
+
+  if (messenger_psid) {
+    await supabase.from('orders').update({ messenger_psid }).eq('id', order.id);
+    await supabase.from('customers').update({ messenger_psid }).eq('id', order.customer_id);
+  }
+  if (b.delivery_slot) {
+    await supabase.from('orders').update({ delivery_time: b.delivery_slot }).eq('id', order.id);
   }
 
   return res
     .status(201)
-    .json({ id, created_at, quantity, container_size: product.size, total_amount });
+    .json({ id: order.id, created_at: order.created_at, quantity, container_size: product.size, total_amount: order.total_amount });
 }

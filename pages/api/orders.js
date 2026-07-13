@@ -1,10 +1,11 @@
-import { initDb } from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
-import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
+import { getSupabase } from '@/lib/supabaseAdmin';
+import { DEFAULT_BRANCH_ID } from '@/lib/constants';
+import crypto from 'node:crypto';
+import { computeRewards, normalizePhone } from '@/lib/loyalty';
 import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
-import { verifyAdmin, verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
+import { verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
+import { PRODUCTS_BY_ID } from '@/lib/products';
 import { validateSchedule } from '@/lib/scheduling';
 import { z } from 'zod';
 
@@ -37,18 +38,11 @@ const OrderSchema = z.object({
 });
 
 export default async function handler(req, res) {
-  let sql;
-  try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
-
   if (req.method === 'GET') {
     if (!adminRate(req, res)) return;
     if (!await verifyAdminWithLockout(req, res)) return;
     try {
+      const supabase = getSupabase();
       const page = Math.max(1, parseInt(req.query.page) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
       const offset = (page - 1) * limit;
@@ -58,40 +52,34 @@ export default async function handler(req, res) {
 
       const validStatuses = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
       const hasStatus = validStatuses.includes(statusFilter);
-      const hasSearch = search.length > 0;
-      const escSearch = search.replace(/[%_\\]/g, '\\$&');
-      const searchPattern = `%${escSearch}%`;
 
       const sortMap = {
-        date_desc: sql`created_at DESC`,
-        date_asc: sql`created_at ASC`,
-        total_desc: sql`total_amount DESC`,
-        total_asc: sql`total_amount ASC`,
-        name_asc: sql`customer_name ASC`,
-        name_desc: sql`customer_name DESC`,
-        status_asc: sql`status ASC`,
+        date_desc: ['created_at', false], date_asc: ['created_at', true],
+        total_desc: ['total_amount', false], total_asc: ['total_amount', true],
+        name_asc: ['customer_name', true], name_desc: ['customer_name', false],
+        status_asc: ['status', true],
       };
-      const orderBy = sortMap[sortParam] || sql`created_at DESC`;
+      const [sortCol, sortAsc] = sortMap[sortParam] || sortMap.date_desc;
 
-      const where =
-        hasStatus && hasSearch ? sql`WHERE status = ${statusFilter} AND (customer_name ILIKE ${searchPattern} OR phone ILIKE ${searchPattern} OR id ILIKE ${searchPattern})`
-        : hasStatus ? sql`WHERE status = ${statusFilter}`
-        : hasSearch ? sql`WHERE (customer_name ILIKE ${searchPattern} OR phone ILIKE ${searchPattern} OR id ILIKE ${searchPattern})`
-        : sql``;
+      let query = supabase.from('orders').select('*', { count: 'exact' });
+      if (hasStatus) query = query.eq('status', statusFilter);
+      if (search) query = query.or(`customer_name.ilike.%${search}%,phone.ilike.%${search}%`);
+      query = query.order(sortCol, { ascending: sortAsc }).range(offset, offset + limit - 1);
 
-      const [rows, countResult, statusRows] = await Promise.all([
-        sql`SELECT * FROM orders ${where} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
-        sql`SELECT COUNT(*)::int AS total FROM orders ${where}`,
-        sql`SELECT status, COUNT(*)::int AS count FROM orders GROUP BY status`,
+      const [{ data: rows, count: total, error }, { data: statusRows }] = await Promise.all([
+        query,
+        supabase.from('orders').select('status'),
       ]);
+      if (error) throw error;
 
-      const total = countResult[0]?.total ?? 0;
-      const statusCounts = Object.fromEntries(statusRows.map((r) => [r.status, r.count]));
+      const statusCounts = {};
+      for (const r of statusRows || []) statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
+
       return res.status(200).json({
         orders: rows,
-        total,
+        total: total ?? 0,
         page,
-        totalPages: Math.ceil(total / limit) || 1,
+        totalPages: Math.ceil((total ?? 0) / limit) || 1,
         statusCounts,
       });
     } catch (err) {
@@ -116,8 +104,6 @@ export default async function handler(req, res) {
       has_empty_containers, pickupDate, pickupTime, deliveryDate, deliveryTime,
     } = parsed.data;
 
-    // Price is computed server-side from the catalog — never trust the client's
-    // total_amount or container_size (prevents price tampering).
     const product = PRODUCTS_BY_ID[product_type];
     if (!product) {
       return res.status(400).json({ error: 'Unknown product' });
@@ -133,19 +119,16 @@ export default async function handler(req, res) {
     }
 
     const containerSize = product.size;
-    const refillSubtotal = product.refill * quantity;
-    const containerSubtotal = need_container ? product.container * (container_quantity || 0) : 0;
-    const computedBase = refillSubtotal + containerSubtotal + deliveryFee(quantity);
-
+    const supabase = getSupabase();
     const normPhone = normalizePhone(phone);
+
     let available = 0;
     try {
-      const prior = await sql`
-        SELECT status, container_size, quantity, voucher_count
-        FROM orders
-        WHERE phone_normalized = ${normPhone}
-      `;
-      available = computeRewards(prior).available;
+      const { data: prior } = await supabase
+        .from('orders')
+        .select('status, container_size, quantity, voucher_count')
+        .eq('phone_normalized', normPhone);
+      available = computeRewards(prior || []).available;
     } catch (e) {
       available = 0;
     }
@@ -155,37 +138,35 @@ export default async function handler(req, res) {
     let reward_requested_store = 0;
     if (requested > 0 && reward_code) {
       try {
-        // Mirror verify-code.js: only the single latest unused code counts, and
-        // attempts are capped — otherwise reward_code could be brute-forced via
-        // repeated order submissions without ever tripping CODE_MAX_ATTEMPTS.
-        const codeRows = await sql`
-          SELECT id, code_hash, expires_at, used, attempts FROM reward_codes
-          WHERE phone = ${normPhone} AND used = 0
-          ORDER BY created_at DESC LIMIT 1
-        `;
-        const row = codeRows[0];
+        const { data: codeRows } = await supabase
+          .from('reward_codes')
+          .select('id, code_hash, expires_at, used, attempts')
+          .eq('phone', normPhone)
+          .eq('used', false)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const row = codeRows?.[0];
         const nowIso = new Date().toISOString();
         if (row && row.expires_at > nowIso && row.attempts < CODE_MAX_ATTEMPTS) {
           if (timingSafeEqual(row.code_hash, hashCode(normPhone, String(reward_code)))) {
-            // Atomic claim: WHERE used = 0 guards against two concurrent
-            // orders spending the same code (double voucher grant).
-            const claimed = await sql`
-              UPDATE reward_codes SET used = 1
-              WHERE id = ${row.id} AND used = 0
-              RETURNING id
-            `;
-            if (claimed.length > 0) {
+            const { data: claimed } = await supabase
+              .from('reward_codes')
+              .update({ used: true })
+              .eq('id', row.id)
+              .eq('used', false)
+              .select('id');
+            if (claimed && claimed.length > 0) {
               voucher_count = Math.min(requested, available);
             } else {
               reward_requested_store = requested;
             }
           } else {
-            await sql`UPDATE reward_codes SET attempts = attempts + 1 WHERE id = ${row.id}`;
+            await supabase.from('reward_codes').update({ attempts: row.attempts + 1 }).eq('id', row.id);
             reward_requested_store = requested;
           }
         } else {
           if (row && row.attempts >= CODE_MAX_ATTEMPTS) {
-            await sql`UPDATE reward_codes SET used = 1 WHERE id = ${row.id}`;
+            await supabase.from('reward_codes').update({ used: true }).eq('id', row.id);
           }
           reward_requested_store = requested;
         }
@@ -195,65 +176,70 @@ export default async function handler(req, res) {
     } else if (requested > 0) {
       reward_requested_store = requested;
     }
-    const voucher_discount = voucher_count * VOUCHER_VALUE;
-    const finalTotal = Math.max(0, computedBase - voucher_discount);
 
-    const id = uuidv4().slice(0, 8).toUpperCase();
-    const created_at = new Date().toISOString();
-    const nc = need_container ? 1 : 0;
-    const cq = container_quantity || 0;
-    const gn = gcash_number || null;
-    const rn = reference_number || null;
-    const nt = notes || null;
-    const ps = payment_screenshot || null;
+    const id = crypto.randomUUID();
 
-    const hec = hasEmptyContainers ? 1 : 0;
-    const insertOrder = sql`
-      INSERT INTO orders (
-        id, customer_name, phone, address, barangay,
-        product_type, container_size, quantity,
-        need_container, container_quantity,
-        payment_method, gcash_number, reference_number, payment_screenshot,
-        notes, total_amount, created_at,
-        voucher_count, voucher_discount, reward_requested,
-        phone_normalized, has_empty_containers, pickup_date, pickup_time,
-        delivery_date_new, delivery_time
-      ) VALUES (
-        ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
-        ${product_type}, ${containerSize}, ${quantity},
-        ${nc}, ${cq},
-        ${payment_method}, ${gn}, ${rn}, ${ps},
-        ${nt}, ${finalTotal}, ${created_at},
-        ${voucher_count}, ${voucher_discount}, ${reward_requested_store},
-        ${normPhone}, ${hec}, ${hasEmptyContainers ? pickupDate : null}, ${hasEmptyContainers ? pickupTime : null},
-        ${deliveryDate}, ${deliveryTime}
-      )
-    `;
-
-    try {
-      if (hasEmptyContainers) {
-        const pickupId = uuidv4().slice(0, 8).toUpperCase();
-        const insertPickup = sql`
-          INSERT INTO container_pickups (
-            id, order_id, customer_name, phone, phone_normalized, address, barangay,
-            container_qty, pickup_date, pickup_time, delivery_date, delivery_time,
-            status, notes, messenger_psid, created_at, updated_at
-          ) VALUES (
-            ${pickupId}, ${id}, ${customer_name}, ${phone}, ${normPhone}, ${address}, ${barangay},
-            ${quantity}, ${pickupDate}, ${pickupTime}, ${deliveryDate}, ${deliveryTime},
-            'scheduled', '', NULL, ${created_at}, ${created_at}
-          )
-        `;
-        await sql.transaction([insertOrder, insertPickup]);
-      } else {
-        await insertOrder;
+    let screenshotPath = null;
+    if (payment_screenshot) {
+      const match = /^data:(image\/\w+);base64,(.+)$/.exec(payment_screenshot);
+      if (match) {
+        const [, contentType, base64] = match;
+        const ext = contentType === 'image/png' ? 'png' : 'jpg';
+        screenshotPath = `${id}/payment.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('payment-screenshots')
+          .upload(screenshotPath, Buffer.from(base64, 'base64'), { contentType, upsert: true });
+        if (uploadErr) {
+          console.error('Screenshot upload failed:', uploadErr);
+          screenshotPath = null;
+        }
       }
-    } catch (err) {
-      console.error('Order insert failed:', err);
+    }
+
+    const { data: order, error: rpcErr } = await supabase.rpc('create_order', {
+      p_client_order_id: id,
+      p_branch_id: DEFAULT_BRANCH_ID,
+      p_customer_name: customer_name,
+      p_phone: phone,
+      p_address: address,
+      p_barangay: barangay,
+      p_address_label: 'Home',
+      p_product_type: product_type,
+      p_container_size: containerSize,
+      p_quantity: quantity,
+      p_need_container: !!need_container,
+      p_container_quantity: container_quantity || 0,
+      p_payment_method: payment_method,
+      p_gcash_number: gcash_number || null,
+      p_reference_number: reference_number || null,
+      p_payment_screenshot_path: screenshotPath,
+      p_notes: notes || null,
+      p_total_amount: 0,
+      p_sale_channel: 'online',
+      p_cash_tendered: null,
+      p_voucher_count: voucher_count,
+      p_reward_requested: reward_requested_store,
+    });
+
+    if (rpcErr) {
+      console.error('Order insert failed:', rpcErr);
       return res.status(500).json({ error: 'Failed to place order' });
     }
 
-    return res.status(201).json({ id, created_at });
+    if (hasEmptyContainers) {
+      const { error: pickupErr } = await supabase.from('container_pickups').insert({
+        branch_id: DEFAULT_BRANCH_ID,
+        order_id: order.id,
+        customer_name, phone, address, barangay,
+        container_qty: quantity,
+        pickup_date: pickupDate, pickup_time: pickupTime,
+        delivery_date: deliveryDate, delivery_time: deliveryTime,
+        status: 'scheduled', notes: '',
+      });
+      if (pickupErr) console.error('Container pickup insert failed:', pickupErr);
+    }
+
+    return res.status(201).json({ id: order.id, created_at: order.created_at });
   }
 
   res.status(405).json({ error: 'Method not allowed' });
