@@ -1,67 +1,45 @@
-import { initDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabaseAdmin';
+import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { normalizePhone } from '@/lib/loyalty';
 import { sendMessengerMessage } from '@/lib/facebook';
-import { v4 as uuidv4 } from 'uuid';
+import { normalizePhone } from '@/lib/loyalty';
 import { z } from 'zod';
 
-const adminRate = rateLimit({ windowMs: 60_000, max: 15 });
-
-const MessageSchema = z.object({
-  message: z.string().min(1).max(2000),
-});
+const adminRate = rateLimit({ windowMs: 60_000, max: 20 });
+const BodySchema = z.object({ text: z.string().min(1).max(2000) });
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!adminRate(req, res)) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
+  const parsed = BodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid message' });
+
+  const supabase = getSupabase();
   const phone = normalizePhone(req.query.phone);
-  if (phone.length < 7) {
-    return res.status(400).json({ error: 'Invalid phone number' });
-  }
-
-  const parsed = MessageSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: 'Invalid message data' });
-  }
-
-  let sql;
-  try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
+  const { data: rows } = await supabase
+    .from('orders')
+    .select('messenger_psid')
+    .eq('phone_normalized', phone)
+    .not('messenger_psid', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const psid = rows?.[0]?.messenger_psid;
+  if (!psid) return res.status(400).json({ error: 'No Messenger account linked for this customer' });
 
   try {
-    const orders = await sql`
-      SELECT messenger_psid FROM orders
-      WHERE phone_normalized = ${phone} AND messenger_psid IS NOT NULL
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
-
-    if (orders.length === 0 || !orders[0].messenger_psid) {
-      return res.status(400).json({ error: 'Customer has no Messenger linked' });
-    }
-
-    const psid = orders[0].messenger_psid;
-    await sendMessengerMessage(psid, parsed.data.message);
-
-    const id = uuidv4().slice(0, 8).toUpperCase();
-    const now = new Date().toISOString();
-    await sql`
-      INSERT INTO contact_log (id, phone_normalized, channel, direction, summary, order_id, created_at)
-      VALUES (${id}, ${phone}, 'messenger', 'outbound', ${parsed.data.message}, ${null}, ${now})
-    `;
-
-    return res.status(200).json({ success: true });
+    await sendMessengerMessage(psid, parsed.data.text);
   } catch (err) {
-    console.error('Messenger send failed:', err);
+    console.error('Message send failed:', err);
     return res.status(500).json({ error: 'Failed to send message' });
   }
+
+  await supabase.from('contact_log').insert({
+    branch_id: DEFAULT_BRANCH_ID, phone_normalized: phone,
+    channel: 'messenger', direction: 'outbound', summary: parsed.data.text, order_id: null,
+  });
+
+  return res.status(200).json({ success: true });
 }
