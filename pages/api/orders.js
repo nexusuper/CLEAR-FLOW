@@ -219,6 +219,8 @@ export default async function handler(req, res) {
       p_cash_tendered: null,
       p_voucher_count: voucher_count,
       p_reward_requested: reward_requested_store,
+      p_delivery_date: deliveryDate,
+      p_delivery_time: deliveryTime,
     });
 
     if (rpcErr) {
