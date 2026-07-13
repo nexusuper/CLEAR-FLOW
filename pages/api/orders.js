@@ -63,7 +63,7 @@ export default async function handler(req, res) {
 
       let query = supabase.from('orders').select('*', { count: 'exact' });
       if (hasStatus) query = query.eq('status', statusFilter);
-      if (search) query = query.or(`customer_name.ilike.%${search}%,phone.ilike.%${search}%`);
+      if (search) query = query.or(`customer_name.ilike.%${search}%,phone.ilike.%${search}%,id.ilike.%${search}%`);
       query = query.order(sortCol, { ascending: sortAsc }).range(offset, offset + limit - 1);
 
       const [{ data: rows, count: total, error }, { data: statusRows }] = await Promise.all([
