@@ -1,34 +1,27 @@
-import { initDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabaseAdmin';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { z } from 'zod';
 
-const checkRate = rateLimit({ windowMs: 60_000, max: 10 });
+const adminRate = rateLimit({ windowMs: 60_000, max: 10 });
+const BodySchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!checkRate(req, res)) return;
-
+  if (!adminRate(req, res)) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
-  const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
-    return res.status(400).json({ error: 'Invalid order IDs' });
-  }
-  const validId = /^[A-Z0-9]{1,8}$/i;
-  if (!ids.every((id) => typeof id === 'string' && validId.test(id))) {
-    return res.status(400).json({ error: 'Invalid order ID format' });
-  }
+  const parsed = BodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid request' });
 
-  try {
-    const sql = await initDb();
-    await sql`
-      DELETE FROM orders
-      WHERE id = ANY(${ids})
-      AND status IN ('delivered', 'cancelled')
-    `;
-    return res.status(200).json({ success: true });
-  } catch (err) {
-    console.error('Bulk delete failed:', err);
+  const { error, count } = await getSupabase()
+    .from('orders')
+    .delete({ count: 'exact' })
+    .in('id', parsed.data.ids)
+    .in('status', ['delivered', 'cancelled']);
+  if (error) {
+    console.error('Bulk delete failed:', error);
     return res.status(500).json({ error: 'Failed to delete orders' });
   }
+  return res.status(200).json({ deleted: count ?? 0 });
 }

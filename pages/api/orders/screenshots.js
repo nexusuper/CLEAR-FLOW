@@ -1,76 +1,48 @@
-import { initDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabaseAdmin';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { z } from 'zod';
 
-const readRate = rateLimit({ windowMs: 60_000, max: 30 });
-const writeRate = rateLimit({ windowMs: 60_000, max: 10 });
+const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
+const DeleteSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
 
 export default async function handler(req, res) {
-  let sql;
-  try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
+  if (!adminRate(req, res)) return;
+  if (!await verifyAdminWithLockout(req, res)) return;
+  const supabase = getSupabase();
 
   if (req.method === 'GET') {
-    if (!readRate(req, res)) return;
-    if (!await verifyAdminWithLockout(req, res)) return;
-
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = 24;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
     const offset = (page - 1) * limit;
-
-    try {
-      const [rows, countRows] = await Promise.all([
-        sql`
-          SELECT id, customer_name, phone, created_at, payment_method,
-                 reference_number, payment_verified, payment_screenshot
-          FROM orders
-          WHERE payment_screenshot IS NOT NULL
-          ORDER BY created_at DESC
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-        sql`SELECT COUNT(*)::int AS total FROM orders WHERE payment_screenshot IS NOT NULL`,
-      ]);
-      const total = countRows[0]?.total || 0;
-      return res.status(200).json({
-        items: rows,
-        total,
-        page,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
-      });
-    } catch (err) {
-      console.error('Screenshot list failed:', err);
+    const { data: rows, count: total, error } = await supabase
+      .from('orders')
+      .select('id, customer_name, phone, created_at, payment_screenshot_path', { count: 'exact' })
+      .not('payment_screenshot_path', 'is', null)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) {
+      console.error('Screenshots query failed:', error);
       return res.status(500).json({ error: 'Failed to load screenshots' });
     }
+    return res.status(200).json({ orders: rows, total: total ?? 0, page, totalPages: Math.ceil((total ?? 0) / limit) || 1 });
   }
 
   if (req.method === 'DELETE') {
-    if (!writeRate(req, res)) return;
-    if (!await verifyAdminWithLockout(req, res)) return;
+    const parsed = DeleteSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid request' });
 
-    const { ids } = req.body || {};
-    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
-      return res.status(400).json({ error: 'Invalid order IDs' });
-    }
-    const validId = /^[A-Z0-9]{1,8}$/i;
-    if (!ids.every((id) => typeof id === 'string' && validId.test(id))) {
-      return res.status(400).json({ error: 'Invalid order ID format' });
-    }
+    const { data: rows } = await supabase.from('orders').select('id, payment_screenshot_path').in('id', parsed.data.ids);
+    const paths = (rows || []).map((r) => r.payment_screenshot_path).filter(Boolean);
+    if (paths.length) await supabase.storage.from('payment-screenshots').remove(paths);
 
-    try {
-      await sql`
-        UPDATE orders SET payment_screenshot = NULL
-        WHERE id = ANY(${ids})
-      `;
-      return res.status(200).json({ success: true });
-    } catch (err) {
-      console.error('Screenshot delete failed:', err);
-      return res.status(500).json({ error: 'Failed to delete screenshots' });
+    const { error } = await supabase.from('orders').update({ payment_screenshot_path: null }).in('id', parsed.data.ids);
+    if (error) {
+      console.error('Screenshot bulk-clear failed:', error);
+      return res.status(500).json({ error: 'Failed to clear screenshots' });
     }
+    return res.status(200).json({ success: true });
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  res.status(405).json({ error: 'Method not allowed' });
 }
