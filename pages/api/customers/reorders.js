@@ -1,4 +1,4 @@
-import { initDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabaseAdmin';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { computeReorderStatus } from '@/lib/reorder';
@@ -7,27 +7,19 @@ import { computeSegment } from '@/lib/segments';
 const adminRate = rateLimit({ windowMs: 60_000, max: 60 });
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!adminRate(req, res)) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
-  let sql;
   try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
-
-  try {
-    const rows = await sql`
-      SELECT phone_normalized, customer_name, phone, total_amount, created_at, messenger_psid
-      FROM orders
-      WHERE phone_normalized IS NOT NULL AND phone_normalized <> ''
-      ORDER BY phone_normalized, created_at
-    `;
+    const { data: rows, error } = await getSupabase()
+      .from('orders')
+      .select('phone_normalized, customer_name, phone, total_amount, created_at, messenger_psid')
+      .not('phone_normalized', 'is', null)
+      .neq('phone_normalized', '')
+      .order('phone_normalized', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
 
     const groups = new Map();
     for (const o of rows) {

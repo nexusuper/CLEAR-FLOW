@@ -1,32 +1,25 @@
-import { initDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabaseAdmin';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!adminRate(req, res)) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
-  let sql;
   try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
-
-  try {
-    const rows = await sql`
-      SELECT DISTINCT trim(unnest(string_to_array(tags, ','))) AS tag
-      FROM customer_notes
-      WHERE tags IS NOT NULL AND tags != ''
-      ORDER BY tag
-    `;
-    return res.status(200).json({ tags: rows.map((r) => r.tag).filter(Boolean) });
+    const { data: rows, error } = await getSupabase().from('customer_notes').select('tags');
+    if (error) throw error;
+    const tagSet = new Set();
+    for (const r of rows) {
+      for (const t of (r.tags || '').split(',')) {
+        const trimmed = t.trim();
+        if (trimmed) tagSet.add(trimmed);
+      }
+    }
+    return res.status(200).json({ tags: [...tagSet].sort() });
   } catch (err) {
     console.error('Tags query failed:', err);
     return res.status(500).json({ error: 'Failed to load tags' });
