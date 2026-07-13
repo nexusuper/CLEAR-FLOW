@@ -19,7 +19,7 @@ export default async function handler(req, res) {
       .from('orders')
       .select('*')
       .in('status', ['confirmed', 'out_for_delivery'])
-      .eq('delivery_date', today);
+      .or(`delivery_date.eq.${today},delivery_date.is.null`);
     if (error) throw error;
 
     const byBarangay = {};
@@ -33,6 +33,7 @@ export default async function handler(req, res) {
       orders.sort((a, b) => (a.delivery_time || '').localeCompare(b.delivery_time || ''));
       return { barangay, count: orders.length, orders };
     });
+    barangays.sort((a, b) => a.barangay.localeCompare(b.barangay));
 
     return res.status(200).json({ barangays, total: (rows || []).length });
   } catch (err) {
