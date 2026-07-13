@@ -35,11 +35,15 @@ export default async function handler(req, res) {
       await sendMessengerMessage(pickup.messenger_psid, message);
     }
 
-    await supabase.from('contact_log').insert({
-      branch_id: DEFAULT_BRANCH_ID,
-      phone_normalized: normalizePhone(pickup.phone),
-      channel, direction: 'outbound', summary: message, order_id: pickup.order_id,
-    });
+    try {
+      await supabase.from('contact_log').insert({
+        branch_id: DEFAULT_BRANCH_ID,
+        phone_normalized: normalizePhone(pickup.phone),
+        channel, direction: 'outbound', summary: message, order_id: pickup.order_id,
+      });
+    } catch (logErr) {
+      console.error('Pickup notify contact_log insert failed:', logErr);
+    }
 
     return res.status(200).json({ success: true, phone: pickup.phone, message });
   } catch (err) {
