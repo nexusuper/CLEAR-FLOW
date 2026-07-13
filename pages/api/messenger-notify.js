@@ -1,64 +1,38 @@
-import { initDb } from '@/lib/db';
-import { sendMessengerMessage } from '@/lib/facebook';
+import { getSupabase } from '@/lib/supabaseAdmin';
+import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { v4 as uuidv4 } from 'uuid';
 import { normalizePhone } from '@/lib/loyalty';
 import { buildStatusMessage } from '@/lib/notifications';
+import { sendMessengerMessage } from '@/lib/facebook';
+import { z } from 'zod';
 
-const checkRate = rateLimit({ windowMs: 60_000, max: 20 });
+const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
+const BodySchema = z.object({ order_id: z.string().uuid() });
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-  if (!checkRate(req, res)) return;
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!adminRate(req, res)) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
-  const { orderId, status } = req.body;
-  if (!orderId || !status) {
-    return res.status(400).json({ error: 'Missing orderId or status' });
-  }
-  if (!buildStatusMessage({ customer_name: 'x', id: 'x' }, status, 'messenger')) {
-    return res.status(400).json({ error: 'No message template for this status' });
-  }
+  const parsed = BodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid request' });
+
+  const supabase = getSupabase();
+  const { data: order } = await supabase.from('orders').select('*').eq('id', parsed.data.order_id).single();
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  if (!order.messenger_psid) return res.status(400).json({ error: 'No Messenger account linked to this order' });
 
   try {
-    const sql = await initDb();
-    const rows = await sql`SELECT * FROM orders WHERE id = ${orderId}`;
-    const order = rows[0];
-
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    if (!order.messenger_psid) {
-      return res.status(400).json({
-        error: 'No Messenger linked',
-        message: 'Customer has not linked their Messenger account. Use SMS instead.',
-      });
-    }
-
-    const messageText = buildStatusMessage(order, status, 'messenger');
-    await sendMessengerMessage(order.messenger_psid, messageText);
-
-    const normPhone = normalizePhone(order.phone);
-    try {
-      await sql`
-        INSERT INTO contact_log (id, phone_normalized, channel, direction, summary, order_id, created_at)
-        VALUES (${uuidv4().slice(0, 8).toUpperCase()}, ${normPhone}, 'messenger', 'outbound', ${messageText}, ${orderId}, ${new Date().toISOString()})
-      `;
-    } catch (logErr) {
-      console.error('Contact log insert failed:', logErr);
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Notification sent via Messenger',
+    const text = buildStatusMessage(order, order.status, 'messenger');
+    await sendMessengerMessage(order.messenger_psid, text);
+    await supabase.from('contact_log').insert({
+      branch_id: DEFAULT_BRANCH_ID, phone_normalized: normalizePhone(order.phone),
+      channel: 'messenger', direction: 'outbound', summary: text, order_id: order.id,
     });
-
-  } catch (error) {
-    console.error('Messenger notify error:', error);
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('Messenger notify failed:', err);
     return res.status(500).json({ error: 'Failed to send notification' });
   }
 }

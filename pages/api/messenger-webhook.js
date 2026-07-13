@@ -1,7 +1,7 @@
 // Facebook Messenger Webhook
 // Receives messages and stores customer PSID for notifications
-import { initDb } from '@/lib/db';
-import { verifyWebhookSignature } from '@/lib/facebook';
+import { getSupabase } from '@/lib/supabaseAdmin';
+import { sendMessengerMessage, verifyWebhookSignature } from '@/lib/facebook';
 import { timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -96,17 +96,36 @@ export default async function handler(req, res) {
 async function handleMessage(senderPsid, messageText) {
   const text = messageText.trim();
 
-  // Only Order ID linkage is supported (8-char alphanumeric)
-  const orderIdMatch = text.match(/^[a-z0-9]{8}$/i);
-  if (orderIdMatch) {
-    await linkPsidToOrder(senderPsid, orderIdMatch[0].toUpperCase());
+  // Only Order ID linkage is supported (uuid — orders no longer have a short code)
+  const ORDER_ID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  const match = text.match(ORDER_ID_RE);
+  if (match) {
+    const orderId = match[0].toLowerCase();
+    const supabase = getSupabase();
+    const { data: order } = await supabase
+      .from('orders')
+      .select('id, messenger_psid, status, created_at, customer_id')
+      .eq('id', orderId)
+      .single();
+
+    // Only orders still in-flight and created recently can be linked — closes
+    // the window where a stale/completed order ID (e.g. from an old screenshot)
+    // could be used by a stranger to bind their Messenger to someone else's order.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    if (order && !order.messenger_psid && !['delivered', 'cancelled'].includes(order.status) && order.created_at > thirtyDaysAgo) {
+      await supabase.from('orders').update({ messenger_psid: senderPsid }).eq('id', orderId);
+      if (order.customer_id) {
+        await supabase.from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
+      }
+      await sendMessengerMessage(senderPsid, `Got it — your order is linked. Current status: ${order.status}.`);
+    }
     return;
   }
 
   // Fallback: guide customer to use their Order ID
   await sendReply(senderPsid,
     `👋 Hi! I'm the Clear Flow assistant.\n\n` +
-    `To receive order updates here, send me your Order ID (e.g., A1B2C3D4).\n\n` +
+    `To receive order updates here, send me your Order ID.\n\n` +
     `You can find your Order ID on your order confirmation page, or look it up at our website using your phone number. 💧`
   );
 }
@@ -116,55 +135,10 @@ async function handlePostback(senderPsid, payload) {
     await sendReply(senderPsid,
       `👋 Welcome to Clear Flow!\n\n` +
       `We deliver fresh purified water right to your door.\n\n` +
-      `To get order updates here, send me your Order ID (e.g., A1B2C3D4). You can find it on your confirmation page after placing an order.\n\n` +
+      `To get order updates here, send me your Order ID. You can find it on your confirmation page after placing an order.\n\n` +
       `Questions? Just type your message and we'll get back to you! 💧`
     );
   }
-}
-
-async function linkPsidToOrder(senderPsid, orderId) {
-  try {
-    const sql = await initDb();
-
-    // Only orders still in-flight and created recently can be linked — closes
-    // the window where a stale/completed order ID (e.g. from an old screenshot)
-    // could be used by a stranger to bind their Messenger to someone else's order.
-    const result = await sql`
-      UPDATE orders
-      SET messenger_psid = ${senderPsid}
-      WHERE id = ${orderId} AND messenger_psid IS NULL
-        AND status NOT IN ('delivered', 'cancelled')
-        AND created_at > ${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()}
-      RETURNING customer_name, status
-    `;
-
-    if (result.length > 0) {
-      const order = result[0];
-      await sendReply(senderPsid,
-        `✅ Found it! Hi ${order.customer_name}!\n\n` +
-        `Your order #${orderId} is currently: ${formatStatus(order.status)}\n\n` +
-        `You'll receive updates here when your order status changes. 📱`
-      );
-    } else {
-      await sendReply(senderPsid,
-        `❌ Sorry, I couldn't find order #${orderId}.\n\n` +
-        `Please double-check the Order ID from your confirmation page and try again.`
-      );
-    }
-  } catch (error) {
-    console.error('Error linking PSID to order:', error);
-  }
-}
-
-function formatStatus(status) {
-  const labels = {
-    pending: '⏳ Pending',
-    confirmed: '✅ Confirmed',
-    out_for_delivery: '🛵 Out for Delivery',
-    delivered: '🎉 Delivered',
-    cancelled: '❌ Cancelled',
-  };
-  return labels[status] || status;
 }
 
 async function sendReply(recipientPsid, messageText) {
