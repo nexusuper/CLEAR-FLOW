@@ -1,11 +1,11 @@
-import { initDb } from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
+import { getSupabase } from '@/lib/supabaseAdmin';
+import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { computeRewards, normalizePhone, maxRedeemable, VOUCHER_VALUE } from '@/lib/loyalty';
-import { deductInventoryForSale } from '@/lib/inventory';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 
 const posRate = rateLimit({ windowMs: 60_000, max: 20 });
 
@@ -45,14 +45,6 @@ export default async function handler(req, res) {
   if (!posRate(req, res)) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
-  let sql;
-  try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
-
   const parsed = POSOrderSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid POS sale data', details: parsed.error.flatten() });
@@ -65,7 +57,8 @@ export default async function handler(req, res) {
     redeem_vouchers,
   } = parsed.data;
 
-  // Resolve + price every line server-side — never trust client-submitted prices.
+  const supabase = getSupabase();
+
   const resolvedLines = [];
   for (const line of lines) {
     const product = PRODUCTS_BY_ID[line.product_type];
@@ -79,7 +72,7 @@ export default async function handler(req, res) {
       product_name: product.name,
       container_size: product.size,
       quantity: line.quantity,
-      need_container: line.need_container ? 1 : 0,
+      need_container: !!line.need_container,
       container_quantity: line.container_quantity || 0,
       refill_subtotal,
       container_subtotal,
@@ -92,27 +85,20 @@ export default async function handler(req, res) {
   const totalRefillSubtotal = resolvedLines.reduce((sum, l) => sum + l.refill_subtotal, 0);
   const cartDeliveryFee = isPickup ? 0 : deliveryFee(totalQuantity);
 
-  // Loyalty: direct redemption at checkout (admin-mediated, no Messenger OTP).
   const normPhone = normalizePhone(phone);
   let available = 0;
   try {
-    const prior = await sql`
-      SELECT status, container_size, quantity, voucher_count
-      FROM orders
-      WHERE phone_normalized = ${normPhone}
-    `;
-    available = computeRewards(prior).available;
+    const { data: prior } = await supabase
+      .from('orders')
+      .select('status, container_size, quantity, voucher_count')
+      .eq('phone_normalized', normPhone);
+    available = computeRewards(prior || []).available;
   } catch (e) {
     available = 0;
   }
-  const maxAllowedVouchers = maxRedeemable({
-    available,
-    quantity: totalQuantity,
-    refillSubtotal: totalRefillSubtotal,
-  });
+  const maxAllowedVouchers = maxRedeemable({ available, quantity: totalQuantity, refillSubtotal: totalRefillSubtotal });
   const appliedVouchers = Math.min(redeem_vouchers, maxAllowedVouchers);
 
-  // Distribute redeemed vouchers across lines, greedily, capped by each line's own quantity.
   let remainingVouchers = appliedVouchers;
   for (const line of resolvedLines) {
     const take = Math.min(remainingVouchers, line.quantity);
@@ -128,70 +114,64 @@ export default async function handler(req, res) {
     ? Math.max(0, cash_tendered - totalAmount)
     : null;
 
-  // Attribute the whole-cart delivery fee to the first line only (avoids splitting
-  // a single ₱15/₱20 fee across multiple rows and any per-row rounding oddity).
   resolvedLines[0].delivery_fee = cartDeliveryFee;
   for (let i = 1; i < resolvedLines.length; i++) resolvedLines[i].delivery_fee = 0;
-
   for (const line of resolvedLines) {
     line.line_total = Math.max(0, line.line_base + line.delivery_fee - line.voucher_discount);
   }
 
   const status = isPickup ? 'delivered' : 'pending';
-  const transaction_id = 'TX-' + uuidv4().slice(0, 8).toUpperCase();
-  const created_at = new Date().toISOString();
+  const transaction_id = 'TX-' + crypto.randomUUID().slice(0, 8).toUpperCase();
   const pickupAddress = address || 'Counter Pickup';
   const pickupBarangay = barangay || 'N/A';
-  const gn = gcash_number || null;
-  const rn = reference_number || null;
-  const nt = notes || null;
   const ct = payment_method === 'cod' && cash_tendered != null ? cash_tendered : null;
 
+  const createdOrders = [];
   for (const line of resolvedLines) {
-    line.order_id = uuidv4().slice(0, 8).toUpperCase();
+    const { data: order, error } = await supabase.rpc('create_order', {
+      p_client_order_id: crypto.randomUUID(),
+      p_branch_id: DEFAULT_BRANCH_ID,
+      p_customer_name: customer_name,
+      p_phone: phone,
+      p_address: isPickup ? pickupAddress : address,
+      p_barangay: isPickup ? pickupBarangay : barangay,
+      p_address_label: 'Home',
+      p_product_type: line.product_type,
+      p_container_size: line.container_size,
+      p_quantity: line.quantity,
+      p_need_container: line.need_container,
+      p_container_quantity: line.container_quantity,
+      p_payment_method: payment_method === 'paymaya' ? 'gcash' : payment_method,
+      p_gcash_number: gcash_number || null,
+      p_reference_number: reference_number || null,
+      p_payment_screenshot_path: null,
+      p_notes: notes || null,
+      p_total_amount: 0,
+      p_sale_channel: 'pos',
+      p_cash_tendered: ct,
+      p_voucher_count: line.voucher_count,
+      p_reward_requested: 0,
+    });
+    if (error) {
+      console.error('POS sale insert failed:', error);
+      return res.status(500).json({ error: 'Failed to complete sale' });
+    }
+    await supabase.from('orders').update({ status, transaction_id }).eq('id', order.id);
+    line.order_id = order.id;
+    createdOrders.push(order);
   }
 
-  try {
-    const inserts = resolvedLines.map((line) => sql`
-      INSERT INTO orders (
-        id, customer_name, phone, address, barangay,
-        product_type, container_size, quantity,
-        need_container, container_quantity,
-        payment_method, gcash_number, reference_number,
-        notes, status, total_amount, created_at,
-        voucher_count, voucher_discount, reward_requested,
-        phone_normalized, delivery_slot, delivery_date,
-        transaction_id, sale_channel, cash_tendered
-      ) VALUES (
-        ${line.order_id}, ${customer_name}, ${phone}, ${isPickup ? pickupAddress : address}, ${isPickup ? pickupBarangay : barangay},
-        ${line.product_type}, ${line.container_size}, ${line.quantity},
-        ${line.need_container}, ${line.container_quantity},
-        ${payment_method}, ${gn}, ${rn},
-        ${nt}, ${status}, ${line.line_total}, ${created_at},
-        ${line.voucher_count}, ${line.voucher_discount}, 0,
-        ${normPhone}, ${isPickup ? null : (delivery_slot || null)}, ${isPickup ? null : (delivery_date || null)},
-        ${transaction_id}, 'pos', ${ct}
-      )
-    `);
-    await sql.transaction(inserts);
-  } catch (err) {
-    console.error('POS sale insert failed:', err);
-    return res.status(500).json({ error: 'Failed to complete sale' });
-  }
-
-  // Inventory deduction for pickup sales is best-effort — the sale is already
-  // recorded above; a stock hiccup here is logged but never rolls back the sale.
   if (isPickup) {
     for (const line of resolvedLines) {
       try {
-        const deducted = await deductInventoryForSale(sql, {
-          product_id: line.product_type,
-          qty: line.quantity,
-          order_id: line.order_id,
+        const { error: invErr } = await supabase.rpc('adjust_inventory', {
+          p_branch_id: DEFAULT_BRANCH_ID,
+          p_product_id: line.product_type,
+          p_delta: -line.quantity,
+          p_type: 'sale',
+          p_reason: `POS sale ${line.order_id}`,
         });
-        if (deducted) {
-          await sql`UPDATE orders SET inventory_deducted = 1 WHERE id = ${line.order_id}`;
-        }
+        if (invErr) console.error('POS inventory deduct failed for', line.product_type, invErr);
       } catch (invErr) {
         console.error('POS inventory deduct failed for', line.product_type, invErr);
       }
@@ -200,7 +180,7 @@ export default async function handler(req, res) {
 
   return res.status(201).json({
     transaction_id,
-    created_at,
+    created_at: createdOrders[0]?.created_at,
     fulfillment_type,
     customer_name,
     phone,
@@ -210,7 +190,7 @@ export default async function handler(req, res) {
       product_name: l.product_name,
       quantity: l.quantity,
       refill_subtotal: l.refill_subtotal,
-      need_container: !!l.need_container,
+      need_container: l.need_container,
       container_quantity: l.container_quantity,
       container_subtotal: l.container_subtotal,
       voucher_count: l.voucher_count,
