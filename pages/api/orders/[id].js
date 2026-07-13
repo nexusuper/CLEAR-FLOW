@@ -100,7 +100,10 @@ export default async function handler(req, res) {
         }
       }
 
-      if (status === 'delivered') {
+      // ponytail: guard on the pre-update status, not a new column — old schema's
+      // inventory_deducted flag has no equivalent here, but "was it already
+      // delivered" is the same idempotency check with one fewer table.
+      if (status === 'delivered' && order.status !== 'delivered') {
         try {
           const { error: invErr } = await supabase.rpc('adjust_inventory', {
             p_branch_id: DEFAULT_BRANCH_ID,
