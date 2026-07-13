@@ -26,11 +26,15 @@ export default async function handler(req, res) {
     for (const o of rows || []) {
       (byBarangay[o.barangay] ||= []).push(o);
     }
-    for (const list of Object.values(byBarangay)) {
-      list.sort((a, b) => (a.delivery_time || '').localeCompare(b.delivery_time || ''));
-    }
+    // ponytail: RouteTab.js consumes `{barangays:[{barangay,count,orders}]}`,
+    // not the byBarangay map above -- reshape at the boundary here instead of
+    // touching the one existing frontend caller.
+    const barangays = Object.entries(byBarangay).map(([barangay, orders]) => {
+      orders.sort((a, b) => (a.delivery_time || '').localeCompare(b.delivery_time || ''));
+      return { barangay, count: orders.length, orders };
+    });
 
-    return res.status(200).json({ byBarangay, total: (rows || []).length });
+    return res.status(200).json({ barangays, total: (rows || []).length });
   } catch (err) {
     console.error('Route query failed:', err);
     return res.status(500).json({ error: 'Failed to load route' });
