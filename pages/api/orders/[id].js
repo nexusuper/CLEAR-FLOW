@@ -98,6 +98,10 @@ export default async function handler(req, res) {
         } catch (notifyErr) {
           console.error('Auto Messenger notify failed:', notifyErr);
         }
+      } else if (NOTIFIABLE_STATUSES.includes(status)) {
+        // Notifiable status change but no linked Messenger PSID — flag for staff
+        // to send the SMS reminder manually (AdminPanel shows the pending badge).
+        await supabase.from('orders').update({ sms_pending: true }).eq('id', id);
       }
 
       // ponytail: guard on the pre-update status, not a new column — old schema's
