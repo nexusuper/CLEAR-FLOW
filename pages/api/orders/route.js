@@ -1,54 +1,36 @@
-import { initDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabaseAdmin';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
-const adminRate = rateLimit({ windowMs: 60_000, max: 60 });
+const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
+
+function manilaDate(d = new Date()) {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+}
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!adminRate(req, res)) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
-  let sql;
   try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(500).json({ error: 'Service temporarily unavailable' });
-  }
+    const today = manilaDate();
+    const { data: rows, error } = await getSupabase()
+      .from('orders')
+      .select('*')
+      .in('status', ['confirmed', 'out_for_delivery'])
+      .eq('delivery_date', today);
+    if (error) throw error;
 
-  try {
-    // Compute "today" in Philippine time (en-CA yields YYYY-MM-DD) so the
-    // route is correct even when the server runs in UTC (e.g. Vercel).
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-
-    const rows = await sql`
-      SELECT id, customer_name, phone, address, barangay,
-             product_type, quantity, delivery_slot, has_empty_containers,
-             pickup_date, pickup_time, delivery_date_new, delivery_time,
-             status, messenger_psid
-      FROM orders
-      WHERE status IN ('confirmed', 'out_for_delivery')
-        AND (
-          COALESCE(delivery_date_new, delivery_date) = ${today}
-          OR (delivery_date_new IS NULL AND (delivery_date IS NULL OR delivery_date = ''))
-        )
-      ORDER BY barangay ASC, COALESCE(delivery_time, delivery_slot) ASC NULLS LAST, created_at ASC
-    `;
-
-    const groups = new Map();
-    for (const o of rows) {
-      const key = o.barangay || 'Unspecified';
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(o);
+    const byBarangay = {};
+    for (const o of rows || []) {
+      (byBarangay[o.barangay] ||= []).push(o);
     }
-    const barangays = Array.from(groups.entries())
-      .map(([barangay, orders]) => ({ barangay, count: orders.length, orders }))
-      .sort((a, b) => a.barangay.localeCompare(b.barangay));
+    for (const list of Object.values(byBarangay)) {
+      list.sort((a, b) => (a.delivery_time || '').localeCompare(b.delivery_time || ''));
+    }
 
-    return res.status(200).json({ barangays, total: rows.length });
+    return res.status(200).json({ byBarangay, total: (rows || []).length });
   } catch (err) {
     console.error('Route query failed:', err);
     return res.status(500).json({ error: 'Failed to load route' });
