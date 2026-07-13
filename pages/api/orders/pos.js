@@ -154,6 +154,15 @@ export default async function handler(req, res) {
     });
     if (error) {
       console.error('POS sale insert failed:', error);
+      // ponytail: individual RPC calls can't share one client-side SQL
+      // transaction, so roll back by hand -- delete the lines already
+      // committed this loop so a failed multi-line sale doesn't leave a
+      // partial sale behind.
+      const createdIds = createdOrders.map((o) => o.id).filter(Boolean);
+      if (createdIds.length) {
+        const { error: cleanupErr } = await supabase.from('orders').delete().in('id', createdIds);
+        if (cleanupErr) console.error('POS partial-sale cleanup failed:', cleanupErr);
+      }
       return res.status(500).json({ error: 'Failed to complete sale' });
     }
     await supabase.from('orders').update({ status, transaction_id }).eq('id', order.id);
