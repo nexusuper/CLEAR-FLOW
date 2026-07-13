@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     const offset = (page - 1) * limit;
     const { data: rows, count: total, error } = await supabase
       .from('orders')
-      .select('id, customer_name, phone, created_at, payment_screenshot_path', { count: 'exact' })
+      .select('id, customer_name, phone, created_at, payment_screenshot_path, reference_number, payment_verified, payment_method', { count: 'exact' })
       .not('payment_screenshot_path', 'is', null)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       console.error('Screenshots query failed:', error);
       return res.status(500).json({ error: 'Failed to load screenshots' });
     }
-    return res.status(200).json({ orders: rows, total: total ?? 0, page, totalPages: Math.ceil((total ?? 0) / limit) || 1 });
+    return res.status(200).json({ items: rows, total: total ?? 0, page, totalPages: Math.ceil((total ?? 0) / limit) || 1 });
   }
 
   if (req.method === 'DELETE') {

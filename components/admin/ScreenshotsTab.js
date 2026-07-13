@@ -111,8 +111,8 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
               </label>
               <span className="text-[10px] uppercase font-semibold text-gray-500">{s.payment_method === 'bank_transfer' ? 'BANK TRANSFER' : s.payment_method}</span>
             </div>
-            <a href={s.payment_screenshot} target="_blank" rel="noopener noreferrer">
-              <img src={s.payment_screenshot} alt={`Payment screenshot for order ${s.id}`} className="w-full h-40 object-cover rounded-xl border border-gray-200 hover:opacity-90 mb-2" />
+            <a href={s.payment_screenshot_path} target="_blank" rel="noopener noreferrer">
+              <img src={s.payment_screenshot_path} alt={`Payment screenshot for order ${s.id}`} className="w-full h-40 object-cover rounded-xl border border-gray-200 hover:opacity-90 mb-2" />
             </a>
             <div className="text-sm text-gray-700 font-medium">{s.customer_name}</div>
             <div className="text-xs text-gray-400">{s.phone}</div>
@@ -122,7 +122,7 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
             {s.reference_number && <div className="text-xs text-gray-400">Ref: {s.reference_number}</div>}
             <div className="flex gap-2 mt-3">
               <a
-                href={s.payment_screenshot}
+                href={s.payment_screenshot_path}
                 download={`payment-${s.id}.jpg`}
                 className="flex-1 text-center text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1.5 rounded-full transition-colors"
               >
