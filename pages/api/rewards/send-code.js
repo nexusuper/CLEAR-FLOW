@@ -1,59 +1,41 @@
-import { initDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabaseAdmin';
 import { computeRewards, normalizePhone } from '@/lib/loyalty';
 import { generateCode, hashCode, CODE_TTL_MINUTES } from '@/lib/reward-codes';
 import { sendMessengerMessage } from '@/lib/facebook';
-import { v4 as uuidv4 } from 'uuid';
 import { rateLimit } from '@/lib/rate-limit';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 5 });
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!checkRate(req, res)) return;
 
-  let sql;
-  try {
-    sql = await initDb();
-  } catch (err) {
-    console.error('DB init failed:', err);
-    return res.status(200).json({ sent: false });
-  }
-
+  const supabase = getSupabase();
   const phone = normalizePhone(req.body?.phone);
   if (phone.length < 7) return res.status(200).json({ sent: false });
 
   try {
-    const rows = await sql`
-      SELECT status, container_size, quantity, voucher_count, messenger_psid
-      FROM orders
-      WHERE phone_normalized = ${phone}
-    `;
-    const { available } = computeRewards(rows);
+    const { data: rows } = await supabase
+      .from('orders').select('status, container_size, quantity, voucher_count, messenger_psid').eq('phone_normalized', phone);
+    const { available } = computeRewards(rows || []);
     if (available < 1) return res.status(200).json({ sent: false });
 
-    const linked = rows.find((r) => r.messenger_psid);
+    const linked = (rows || []).find((r) => r.messenger_psid);
     if (!linked) return res.status(200).json({ sent: false });
 
     const code = generateCode();
-    const id = uuidv4();
-    const expires = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000).toISOString();
-    const created = new Date().toISOString();
+    const expires_at = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000).toISOString();
 
-    await sql`
-      INSERT INTO reward_codes (id, phone, code_hash, expires_at, used, attempts, created_at)
-      VALUES (${id}, ${phone}, ${hashCode(phone, code)}, ${expires}, 0, 0, ${created})
-    `;
+    const { data: inserted, error } = await supabase.from('reward_codes').insert({
+      phone, code_hash: hashCode(phone, code), expires_at, used: false, attempts: 0,
+    }).select('id').single();
+    if (error) throw error;
 
     try {
-      await sendMessengerMessage(
-        linked.messenger_psid,
-        `Your Clear Flow reward code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Enter it at checkout to use your free refill.`
-      );
+      await sendMessengerMessage(linked.messenger_psid, `Your Clear Flow reward code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Enter it at checkout to use your free refill.`);
       return res.status(200).json({ sent: true });
     } catch (e) {
-      await sql`DELETE FROM reward_codes WHERE id = ${id}`;
+      await supabase.from('reward_codes').delete().eq('id', inserted.id);
       return res.status(200).json({ sent: false });
     }
   } catch (err) {
