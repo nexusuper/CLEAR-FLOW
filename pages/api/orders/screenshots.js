@@ -25,6 +25,18 @@ export default async function handler(req, res) {
       console.error('Screenshots query failed:', error);
       return res.status(500).json({ error: 'Failed to load screenshots' });
     }
+
+    // payment_screenshot_path is a bare Storage path, not a servable URL —
+    // resolve to a short-lived signed URL before sending to the client.
+    const paths = [...new Set((rows || []).map((r) => r.payment_screenshot_path).filter(Boolean))];
+    if (paths.length > 0) {
+      const { data: signed } = await supabase.storage.from('payment-screenshots').createSignedUrls(paths, 3600);
+      const urlByPath = new Map((signed || []).filter((s) => !s.error).map((s) => [s.path, s.signedUrl]));
+      for (const r of rows || []) {
+        if (r.payment_screenshot_path) r.payment_screenshot_path = urlByPath.get(r.payment_screenshot_path) || null;
+      }
+    }
+
     return res.status(200).json({ items: rows, total: total ?? 0, page, totalPages: Math.ceil((total ?? 0) / limit) || 1 });
   }
 

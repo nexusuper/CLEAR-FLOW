@@ -75,6 +75,17 @@ export default async function handler(req, res) {
       const statusCounts = {};
       for (const r of statusRows || []) statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
 
+      // payment_screenshot_path is a bare Storage path, not a servable URL —
+      // resolve to a short-lived signed URL before sending to the client.
+      const paths = [...new Set((rows || []).map((o) => o.payment_screenshot_path).filter(Boolean))];
+      if (paths.length > 0) {
+        const { data: signed } = await supabase.storage.from('payment-screenshots').createSignedUrls(paths, 3600);
+        const urlByPath = new Map((signed || []).filter((s) => !s.error).map((s) => [s.path, s.signedUrl]));
+        for (const o of rows || []) {
+          if (o.payment_screenshot_path) o.payment_screenshot_path = urlByPath.get(o.payment_screenshot_path) || null;
+        }
+      }
+
       return res.status(200).json({
         orders: rows,
         total: total ?? 0,
