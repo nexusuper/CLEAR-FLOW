@@ -25,6 +25,9 @@ export default async function handler(req, res) {
     let query = supabase.from('container_pickups').select('*');
     if (hasStatus) query = query.eq('status', statusFilter);
     query = query.order(sortCol, { ascending: sortAsc });
+    if (sortParam === 'pickup_date_asc' || sortParam === 'pickup_date_desc') {
+      query = query.order('pickup_time', { ascending: true });
+    }
 
     const [{ data: rows, error }, { data: statusRows }] = await Promise.all([
       query,
