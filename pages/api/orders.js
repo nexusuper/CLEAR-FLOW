@@ -6,7 +6,7 @@ import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID } from '@/lib/products';
-import { validateSchedule } from '@/lib/scheduling';
+import { validateSchedule, manilaToday } from '@/lib/scheduling';
 import { z } from 'zod';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
@@ -25,7 +25,12 @@ const OrderSchema = z.object({
   payment_method: z.enum(['cod', 'gcash', 'bank_transfer']),
   gcash_number: z.string().max(20).optional().nullable(),
   reference_number: z.string().max(100).optional().nullable(),
-  payment_screenshot: z.string().startsWith('data:image/').max(2_000_000).optional().nullable(),
+  // The form posts '' when no file is attached (all COD orders), so the empty
+  // string has to parse — '' is a string, so .optional() alone never engages.
+  payment_screenshot: z
+    .union([z.literal(''), z.string().startsWith('data:image/').max(2_000_000)])
+    .optional()
+    .nullable(),
   notes: z.string().max(1000).optional().nullable(),
   total_amount: z.coerce.number().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
@@ -63,7 +68,13 @@ export default async function handler(req, res) {
 
       let query = supabase.from('orders').select('*', { count: 'exact' });
       if (hasStatus) query = query.eq('status', statusFilter);
-      if (search) query = query.or(`customer_name.ilike.%${search}%,phone.ilike.%${search}%`);
+      // PostgREST splits or() on commas, so an unquoted search for "Smith, John"
+      // would break the filter apart mid-value and 500. Quote each value and
+      // escape any quote/backslash inside it.
+      if (search) {
+        const q = search.replace(/["\\]/g, '\\$&');
+        query = query.or(`customer_name.ilike."%${q}%",phone.ilike."%${q}%"`);
+      }
       query = query.order(sortCol, { ascending: sortAsc }).range(offset, offset + limit - 1);
 
       const [{ data: rows, count: total, error }, { data: statusRows }] = await Promise.all([
@@ -104,6 +115,7 @@ export default async function handler(req, res) {
 
     const parsed = OrderSchema.safeParse(req.body);
     if (!parsed.success) {
+      console.error('Order validation failed:', JSON.stringify(parsed.error.issues));
       return res.status(400).json({ error: 'Invalid order data' });
     }
     const {
@@ -121,7 +133,7 @@ export default async function handler(req, res) {
     }
 
     const hasEmptyContainers = !!has_empty_containers;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = manilaToday();
     const scheduleCheck = validateSchedule({
       hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today,
     });
@@ -133,17 +145,24 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
     const normPhone = normalizePhone(phone);
 
+    // supabase-js resolves with { data: null, error } rather than throwing, so
+    // the error has to be read explicitly or a failed lookup silently reads as
+    // "no vouchers earned".
     let available = 0;
-    try {
-      const { data: prior } = await supabase
-        .from('orders')
-        .select('status, container_size, quantity, voucher_count')
-        .eq('phone_normalized', normPhone);
-      available = computeRewards(prior || []).available;
-    } catch (e) {
-      available = 0;
-    }
+    const { data: prior, error: priorErr } = await supabase
+      .from('orders')
+      .select('status, container_size, quantity, voucher_count')
+      .eq('phone_normalized', normPhone);
+    if (priorErr) console.error('Reward balance lookup failed:', priorErr);
+    else available = computeRewards(prior || []).available;
+
     const requested = Math.max(0, Math.min(reward_requested || 0, quantity));
+    // Redeeming against an unknown balance marks the customer's code used but
+    // applies no discount, so refuse instead. Non-redeeming orders are
+    // unaffected by a failed lookup and still go through.
+    if (priorErr && requested > 0) {
+      return res.status(503).json({ error: 'Could not verify your rewards balance. Please try again.' });
+    }
 
     let voucher_count = 0;
     let reward_requested_store = 0;
@@ -232,6 +251,11 @@ export default async function handler(req, res) {
       p_reward_requested: reward_requested_store,
       p_delivery_date: deliveryDate,
       p_delivery_time: deliveryTime,
+      // Persist the pickup window on the order itself, not just the
+      // container_pickups ops queue -- /api/orders/[id] derives
+      // has_empty_containers from orders.pickup_date, which was always null.
+      p_pickup_date: hasEmptyContainers ? pickupDate : null,
+      p_pickup_time: hasEmptyContainers ? pickupTime : null,
     });
 
     if (rpcErr) {

@@ -665,7 +665,7 @@ export default function AdminPanel() {
                             {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             {(o.delivery_slot || o.delivery_time) ? (
                               <div className="text-[10px] font-semibold text-sky-600">
-                                {o.has_empty_containers ? `Pickup ${o.pickup_date || ''} ${o.pickup_time || ''} · ` : ''}Delivery {o.delivery_date_new || ''} {o.delivery_time || ''}
+                                {o.pickup_date ? `Pickup ${o.pickup_date} ${o.pickup_time || ''} · ` : ''}Delivery {o.delivery_date || ''} {o.delivery_time || ''}
                               </div>
                             ) : null}
                           </td>

@@ -33,7 +33,7 @@ node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
 ### Stack
 
 - **Next.js 16** (Pages Router) — JavaScript, no TypeScript
-- **Neon Postgres** via `@neondatabase/serverless` (serverless HTTP driver, no ORM)
+- **Supabase Postgres** via `@supabase/supabase-js` (v2), server-only service_role client (no ORM)
 - **Tailwind CSS v4** with a custom "claymorphism" design system
 - **Zod** for API input validation
 - **Facebook Messenger API** for order notifications and webhook intake
@@ -52,7 +52,13 @@ node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
 
 ### API routes (`pages/api/`)
 
-Public routes follow: `initDb()` → rate limit → Zod validation → SQL. Admin routes use `await verifyAdminWithLockout(req, res)` (async, calls `initDb()` internally) instead of the bare `verifyAdmin` — the pattern differs slightly from public routes.
+Public routes follow: rate limit → Zod validation → Supabase query/RPC. Admin routes use `await verifyAdminWithLockout(req, res)` instead of the bare `verifyAdmin` — the pattern differs slightly from public routes.
+
+Writes go through Postgres RPCs, not raw SQL:
+- `create_order` — called by `orders.js`, `orders/pos.js`, `fb-orders.js`. **Authoritative for pricing**: callers deliberately pass `p_total_amount: 0`; the RPC computes the real total from the `products` table and `app_settings.delivery_fee_tiers` server-side. Don't "fix" the 0 — it's not a bug.
+- `adjust_inventory` — called by `inventory/adjust.js`, `inventory/restock.js`, `orders/[id].js`, `orders/pos.js`.
+
+`customers/stats.js`, `customers/index.js`, and `customers/export.js` read from a DB-side `customer_stats` view rather than computing aggregates in JS.
 
 - `orders.js` — CRUD for orders (GET lists for admin, POST creates)
 - `orders/[id].js` — single order read/update/delete
@@ -80,14 +86,13 @@ Public routes follow: `initDb()` → rate limit → Zod validation → SQL. Admi
 
 ### Key libs (`lib/`)
 
-- `db.js` — Neon connection singleton + `initDb()` which creates tables and runs migrations inline (no migration tool)
+- `supabaseAdmin.js` — exports `getSupabase()`, a memoized service_role `createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)`. Server-only, bypasses RLS — never import into browser code. No anon client exists.
 - `auth.js` — timing-safe admin password comparison (`verifyAdmin`) + `verifyAdminWithLockout(req, res)` which adds DB-backed IP lockout (5 failures → 15-min block, clears on success). Use `verifyAdminWithLockout` on all new admin routes.
 - `loyalty.js` — pure loyalty math (gallon counting, voucher computation) — isomorphic, safe for client import
 - `reward-codes.js` — server-only OTP generation and hashing
 - `facebook.js` — Messenger Send API helpers + webhook signature verification
 - `products.js` — product catalog constants and delivery fee schedule
 - `rate-limit.js` — in-memory per-IP rate limiter
-- `inventory.js` — builds the stock-deduction + inventory-log queries for an order sale, meant to run inside a `sql.transaction([...])` for atomicity
 - `notifications.js` — per-order-status Messenger message templates, shared by manual and automatic notify flows
 - `reorder.js` — pure, isomorphic reorder-cadence logic (needs ≥2 orders with timestamps to compute a customer's due/overdue status)
 - `segments.js` — isomorphic customer segment definitions (new/regular/vip/at-risk/churned) used by both API and UI
@@ -106,12 +111,17 @@ Admin endpoints are protected by `verifyAdmin(req)` which compares `req.headers[
 
 ### Database
 
-Schema is created and migrated via `initDb()` in `lib/db.js` (runs on first API call). Tables: `orders`, `reward_codes`, `customer_notes`, `contact_log`, `container_adjustments`, `inventory`, `inventory_log`, `auth_failures`. Phone numbers are normalized (digits only) and indexed as `phone_normalized`.
+**Schema lives outside this repo** — in the sibling staff-app repo `clear-flow-system`, as SQL migrations under `supabase/migrations/*.sql` (0001..0016). This repo has zero `.sql` files and no runtime table creation; schema changes go in `clear-flow-system`, not here.
+
+Live tables (non-exhaustive): `orders`, `customers`, `customer_addresses`, `branches`, `profiles`, `products`, `inventory`, `inventory_log`, `container_ledger`, `container_pickups`, `customer_notes`, `contact_log`, `payments`, `proof_of_delivery`, `reward_codes`, `activity_logs`, `app_settings`, `expenses`, `suppliers`, `machines`, `production_logs`, `quality_tests`, `maintenance_logs`, `cash_reconciliations`, `sync_conflicts`. RLS is enabled on all of them; the service_role client in `lib/supabaseAdmin.js` bypasses it. Most tables carry `branch_id` (multi-branch). Phone numbers are normalized (digits only) and indexed as `phone_normalized`.
+
+Payment screenshots are stored in Supabase Storage, bucket `payment-screenshots`; only the storage path is persisted in `orders.payment_screenshot_path` and resolved to short-lived signed URLs on read.
 
 ### Environment variables
 
 See `.env.example` for all required vars. Key ones:
-- `POSTGRES_URL` — Neon connection string
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` — service_role key, server-only
 - `ADMIN_PASSWORD` — admin panel password
 - `FB_PAGE_ACCESS_TOKEN` / `FB_VERIFY_TOKEN` / `FB_APP_SECRET` — Messenger integration
 - `FB_WEBHOOK_SECRET` — ManyChat order intake webhook secret

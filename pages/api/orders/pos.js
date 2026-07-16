@@ -86,16 +86,21 @@ export default async function handler(req, res) {
   const cartDeliveryFee = isPickup ? 0 : deliveryFee(totalQuantity);
 
   const normPhone = normalizePhone(phone);
+  // supabase-js resolves with { data: null, error } rather than throwing, so the
+  // error has to be read explicitly or a failed lookup reads as "no vouchers".
   let available = 0;
-  try {
-    const { data: prior } = await supabase
-      .from('orders')
-      .select('status, container_size, quantity, voucher_count')
-      .eq('phone_normalized', normPhone);
-    available = computeRewards(prior || []).available;
-  } catch (e) {
-    available = 0;
+  const { data: prior, error: priorErr } = await supabase
+    .from('orders')
+    .select('status, container_size, quantity, voucher_count')
+    .eq('phone_normalized', normPhone);
+  if (priorErr) console.error('POS reward balance lookup failed:', priorErr);
+  else available = computeRewards(prior || []).available;
+  // Redeeming against an unknown balance silently drops the customer's
+  // vouchers, so refuse. Sales with no redemption are unaffected.
+  if (priorErr && redeem_vouchers > 0) {
+    return res.status(503).json({ error: 'Could not verify the rewards balance. Please try again.' });
   }
+
   const maxAllowedVouchers = maxRedeemable({ available, quantity: totalQuantity, refillSubtotal: totalRefillSubtotal });
   const appliedVouchers = Math.min(redeem_vouchers, maxAllowedVouchers);
 
@@ -151,6 +156,15 @@ export default async function handler(req, res) {
       p_cash_tendered: ct,
       p_voucher_count: line.voucher_count,
       p_reward_requested: 0,
+      // Validated above but previously never forwarded, so every POS delivery
+      // landed with a null window and only showed on the route sheet via its
+      // delivery_date.is.null fallback.
+      p_delivery_date: isPickup ? null : (delivery_date || null),
+      p_delivery_time: isPickup ? null : (delivery_slot || null),
+      // The fee is a cart-wide amount already apportioned onto line 0 above. The
+      // RPC would otherwise re-derive it from this line's own quantity, charging
+      // a counter pickup a fee it waived and a multi-line sale one fee per line.
+      p_delivery_fee: line.delivery_fee,
     });
     if (error) {
       console.error('POS sale insert failed:', error);

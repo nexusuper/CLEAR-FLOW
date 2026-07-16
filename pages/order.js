@@ -6,7 +6,7 @@ import ClayIcon from '@/components/ui/ClayIcon';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { PRODUCTS, deliveryFee, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 import {
-  classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule,
+  classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday,
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
   DELIVERY_ONLY_START, DELIVERY_ONLY_END,
 } from '@/lib/scheduling';
@@ -123,7 +123,7 @@ export default function Order() {
   const phoneInvalid = form.phone.trim().length > 0 && !isPhMobile(form.phone);
   const gcashInvalid = form.payment_method === 'gcash' && form.gcash_number.trim().length > 0 && !isPhMobile(form.gcash_number);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = manilaToday();
   const pickupSlot = classifyPickupTime(form.pickup_time);
   const showAfternoonNotice = form.has_empty_containers && pickupSlot === 'afternoon';
   const allowedDelivery = form.has_empty_containers

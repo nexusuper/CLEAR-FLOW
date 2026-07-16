@@ -50,7 +50,7 @@ export default function RouteTab({ savedPassword, onError }) {
                     <div className="flex-1">
                       <div className="font-semibold text-clay-ink flex items-center gap-2">
                         {o.customer_name}
-                        {o.delivery_time && <span className="text-[10px] font-semibold text-sky-600">{o.delivery_date_new} {o.delivery_time}</span>}
+                        {o.delivery_time && <span className="text-[10px] font-semibold text-sky-600">{o.delivery_date} {o.delivery_time}</span>}
                       </div>
                       <div className="text-sm text-gray-600">{o.address}</div>
                       <div className="text-xs text-gray-400">{o.product_type} x{o.quantity}</div>

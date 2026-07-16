@@ -15,6 +15,12 @@ const PatchSchema = z.object({
 const readRate = rateLimit({ windowMs: 60_000, max: 30 });
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 
+// delivery_slot only ever held the legacy 'am'/'pm' values the ManyChat intake
+// writes; structured orders store 'HH:MM' in delivery_time. Echoing the raw
+// time back as a slot as well made the confirmation page render the delivery
+// window twice.
+const legacySlot = (t) => (t === 'am' || t === 'pm' ? t : null);
+
 export default async function handler(req, res) {
   const supabase = getSupabase();
   const { id } = req.query;
@@ -36,10 +42,10 @@ export default async function handler(req, res) {
           customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,
           voucher_count: order.voucher_count, voucher_discount: order.voucher_discount,
           reward_requested: order.reward_requested,
-          delivery_slot: order.delivery_time, delivery_date: order.delivery_date,
+          delivery_slot: legacySlot(order.delivery_time), delivery_date: order.delivery_date,
           has_empty_containers: !!order.pickup_date,
           pickup_date: order.pickup_date, pickup_time: order.pickup_time,
-          delivery_date_new: order.delivery_date, delivery_time: order.delivery_time,
+          delivery_time: order.delivery_time,
         });
       }
       return res.status(200).json({
@@ -51,10 +57,10 @@ export default async function handler(req, res) {
         need_container: order.need_container, container_quantity: order.container_quantity,
         voucher_count: order.voucher_count, voucher_discount: order.voucher_discount,
         reward_requested: order.reward_requested,
-        delivery_slot: order.delivery_time, delivery_date: order.delivery_date,
+        delivery_slot: legacySlot(order.delivery_time), delivery_date: order.delivery_date,
         has_empty_containers: !!order.pickup_date,
         pickup_date: order.pickup_date, pickup_time: order.pickup_time,
-        delivery_date_new: order.delivery_date, delivery_time: order.delivery_time,
+        delivery_time: order.delivery_time,
         payment_verified: order.payment_verified,
       });
     }

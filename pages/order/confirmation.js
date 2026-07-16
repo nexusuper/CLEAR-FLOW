@@ -132,7 +132,7 @@ export default function Confirmation() {
                 {order.delivery_time && (
                   <div className="flex justify-between">
                     <span className="text-clay-muted">Delivery</span>
-                    <span className="font-medium">{order.delivery_date_new} {order.delivery_time}</span>
+                    <span className="font-medium">{order.delivery_date} {order.delivery_time}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-sky-50 pt-2">
