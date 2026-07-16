@@ -52,3 +52,9 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# graphify knowledge-graph output (generated, includes hashed cache)
+/graphify-out/
+
+# playwright-mcp session logs/snapshots
+/.playwright-mcp/
