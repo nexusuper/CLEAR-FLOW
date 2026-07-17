@@ -142,6 +142,11 @@ export default async function handler(req, res) {
     }
 
     const containerSize = product.size;
+    // Everything below can throw (missing/invalid Supabase env, network, storage).
+    // Without this boundary an uncaught throw returns Next's HTML 500 page, which
+    // the client parses as JSON and surfaces as "Unexpected token '<'". Return
+    // JSON so the customer sees a real message and the cause lands in logs.
+    try {
     const supabase = getSupabase();
     const normPhone = normalizePhone(phone);
 
@@ -277,6 +282,10 @@ export default async function handler(req, res) {
     }
 
     return res.status(201).json({ id: order.id, created_at: order.created_at });
+    } catch (err) {
+      console.error('Order POST failed:', err);
+      return res.status(500).json({ error: 'Failed to place order. Please try again.' });
+    }
   }
 
   res.status(405).json({ error: 'Method not allowed' });
