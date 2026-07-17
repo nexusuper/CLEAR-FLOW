@@ -10,6 +10,7 @@ import InventoryTab from './admin/InventoryTab';
 import ScreenshotsTab from './admin/ScreenshotsTab';
 import { SEGMENT_DEFS } from '@/lib/segments';
 import { apiFetch } from '@/lib/api-client';
+import { STATUS_COLORS } from './admin/statusColors';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
 const DELETABLE_STATUSES = ['delivered', 'cancelled'];
@@ -21,15 +22,6 @@ const STATUS_OPTIONS = [
   { value: 'delivered', label: 'Delivered' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
-
-const STATUS_COLORS = {
-  pending: 'bg-yellow-100 text-yellow-700',
-  confirmed: 'bg-blue-100 text-blue-700',
-  out_for_delivery: 'bg-orange-100 text-orange-700',
-  delivered: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-};
-
 
 const SORT_OPTIONS = [
   { value: 'date_desc', label: 'Newest first' },
@@ -235,12 +227,21 @@ export default function AdminPanel() {
 
   async function notifyCustomer(orderId, status) {
     setNotifying(orderId);
-    const res = await fetch('/api/notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', password: savedPassword },
-      body: JSON.stringify({ orderId, status }),
-    });
-    setNotifyModal(await res.json());
+    try {
+      const res = await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ orderId, status }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessengerResult({ error: data?.message || data?.error || 'Failed to generate notification' });
+      } else {
+        setNotifyModal(data);
+      }
+    } catch (e) {
+      setMessengerResult({ error: 'Network error' });
+    }
     setNotifying(null);
   }
 

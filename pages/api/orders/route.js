@@ -26,16 +26,13 @@ export default async function handler(req, res) {
 
     const rows = await sql`
       SELECT id, customer_name, phone, address, barangay,
-             product_type, quantity, delivery_slot, has_empty_containers,
+             product_type, quantity, has_empty_containers,
              pickup_date, pickup_time, delivery_date_new, delivery_time,
              status, messenger_psid
       FROM orders
       WHERE status IN ('confirmed', 'out_for_delivery')
-        AND (
-          COALESCE(delivery_date_new, delivery_date) = ${today}
-          OR (delivery_date_new IS NULL AND (delivery_date IS NULL OR delivery_date = ''))
-        )
-      ORDER BY barangay ASC, COALESCE(delivery_time, delivery_slot) ASC NULLS LAST, created_at ASC
+        AND delivery_date_new = ${today}
+      ORDER BY barangay ASC, delivery_time ASC NULLS LAST, created_at ASC
     `;
 
     const groups = new Map();

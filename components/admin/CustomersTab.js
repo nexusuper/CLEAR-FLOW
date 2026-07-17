@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import ClayIcon from '../ui/ClayIcon';
 import { SEGMENT_DEFS } from '@/lib/segments';
+import { apiFetch } from '@/lib/api-client';
+import { STATUS_COLORS } from './statusColors';
 
 export default function CustomersTab({ savedPassword, onError, onCountChange }) {
   const [customers, setCustomers] = useState([]);
@@ -104,16 +106,16 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
     if (!selectedCustomer || !containerQty) return;
     setSavingContainer(true);
     try {
-      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/container-adjust`, {
+      await apiFetch(`/api/customers/${selectedCustomer.phone_normalized}/container-adjust`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', password: savedPassword },
-        body: JSON.stringify({ delta: sign * Math.abs(containerQty), reason: containerReason }),
+        password: savedPassword,
+        body: { delta: sign * Math.abs(containerQty), reason: containerReason },
       });
       setContainerReason('');
       setContainerQty(1);
       await fetchCustomerDetail(selectedCustomer.phone_normalized);
     } catch (e) {
-      console.error('Failed to adjust containers:', e);
+      onError?.(e.message);
     }
     setSavingContainer(false);
   }
@@ -141,17 +143,17 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
     if (!newNote.trim() || !selectedCustomer) return;
     setSavingNote(true);
     try {
-      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/notes`, {
+      await apiFetch(`/api/customers/${selectedCustomer.phone_normalized}/notes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', password: savedPassword },
-        body: JSON.stringify({ content: newNote, tags: newTags }),
+        password: savedPassword,
+        body: { content: newNote, tags: newTags },
       });
       setNewNote('');
       setNewTags('');
       await fetchCustomerDetail(selectedCustomer.phone_normalized);
       fetchCustomers();
     } catch (e) {
-      console.error('Failed to save note:', e);
+      onError?.(e.message);
     }
     setSavingNote(false);
   }
@@ -160,14 +162,14 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
     if (!selectedCustomer) return;
     if (!window.confirm('Delete this note? This cannot be undone.')) return;
     try {
-      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/notes/${noteId}`, {
+      await apiFetch(`/api/customers/${selectedCustomer.phone_normalized}/notes/${noteId}`, {
         method: 'DELETE',
-        headers: { password: savedPassword },
+        password: savedPassword,
       });
       await fetchCustomerDetail(selectedCustomer.phone_normalized);
       fetchCustomers();
     } catch (e) {
-      console.error('Failed to delete note:', e);
+      onError?.(e.message);
     }
   }
 
@@ -175,15 +177,15 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
     if (!newLogSummary.trim() || !selectedCustomer) return;
     setSavingLog(true);
     try {
-      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/contact-log`, {
+      await apiFetch(`/api/customers/${selectedCustomer.phone_normalized}/contact-log`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', password: savedPassword },
-        body: JSON.stringify({ channel: newLogChannel, direction: 'outbound', summary: newLogSummary }),
+        password: savedPassword,
+        body: { channel: newLogChannel, direction: 'outbound', summary: newLogSummary },
       });
       setNewLogSummary('');
       await fetchCustomerDetail(selectedCustomer.phone_normalized);
     } catch (e) {
-      console.error('Failed to save contact log:', e);
+      onError?.(e.message);
     }
     setSavingLog(false);
   }
@@ -276,10 +278,10 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
     );
     if (existingTags.includes(tag.trim())) return;
     try {
-      await fetch(`/api/customers/${selectedCustomer.phone_normalized}/notes`, {
+      await apiFetch(`/api/customers/${selectedCustomer.phone_normalized}/notes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', password: savedPassword },
-        body: JSON.stringify({ content: `Tag added: ${tag.trim()}`, tags: tag.trim() }),
+        password: savedPassword,
+        body: { content: `Tag added: ${tag.trim()}`, tags: tag.trim() },
       });
       setTagInputValue('');
       setShowTagInput(false);
@@ -287,7 +289,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
       fetchCustomers();
       fetchAllTags();
     } catch (e) {
-      console.error('Failed to add tag:', e);
+      onError?.(e.message);
     }
   }
 

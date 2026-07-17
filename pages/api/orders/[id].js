@@ -138,6 +138,11 @@ export default async function handler(req, res) {
             `;
           } catch (notifyErr) {
             console.error('Auto Messenger notify failed:', notifyErr);
+            try {
+              await sql`UPDATE orders SET sms_pending = 1 WHERE id = ${id}`;
+            } catch (flagErr) {
+              console.error('Set sms_pending failed:', flagErr);
+            }
           }
         } else {
           try {
@@ -148,19 +153,27 @@ export default async function handler(req, res) {
         }
       }
 
-      // Inventory auto-deduct on delivery (idempotent via inventory_deducted flag)
-      if (status === 'delivered' && Number(order.inventory_deducted) === 0) {
-        try {
-          const deducted = await deductInventoryForSale(sql, {
-            product_id: order.product_type,
-            qty: Number(order.quantity) || 0,
-            order_id: id,
-          });
-          if (deducted) {
-            await sql`UPDATE orders SET inventory_deducted = 1 WHERE id = ${id}`;
+      // Inventory auto-deduct on delivery. Flip the inventory_deducted flag
+      // atomically FIRST (WHERE inventory_deducted = 0) and only deduct if this
+      // request is the one that won the flip — mirrors the atomic reward-code
+      // claim in orders.js, and prevents a TOCTOU double-deduction when two
+      // delivered-transitions race.
+      if (status === 'delivered') {
+        const claimed = await sql`
+          UPDATE orders SET inventory_deducted = 1
+          WHERE id = ${id} AND inventory_deducted = 0
+          RETURNING id
+        `;
+        if (claimed.length > 0) {
+          try {
+            await deductInventoryForSale(sql, {
+              product_id: order.product_type,
+              qty: Number(order.quantity) || 0,
+              order_id: id,
+            });
+          } catch (invErr) {
+            console.error('Inventory auto-deduct failed:', invErr);
           }
-        } catch (invErr) {
-          console.error('Inventory auto-deduct failed:', invErr);
         }
       }
 

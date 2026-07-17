@@ -95,15 +95,19 @@ export default async function handler(req, res) {
   // Loyalty: direct redemption at checkout (admin-mediated, no Messenger OTP).
   const normPhone = normalizePhone(phone);
   let available = 0;
+  let earned = 0;
   try {
     const prior = await sql`
       SELECT status, container_size, quantity, voucher_count
       FROM orders
       WHERE phone_normalized = ${normPhone}
     `;
-    available = computeRewards(prior).available;
+    const rewards = computeRewards(prior);
+    available = rewards.available;
+    earned = rewards.earned;
   } catch (e) {
     available = 0;
+    earned = 0;
   }
   const maxAllowedVouchers = maxRedeemable({
     available,
@@ -147,6 +151,14 @@ export default async function handler(req, res) {
   const nt = notes || null;
   const ct = payment_method === 'cod' && cash_tendered != null ? cash_tendered : null;
 
+  // Write the canonical delivery_date_new/delivery_time columns (what the public
+  // order flow and the delivery-route view use) rather than the legacy
+  // delivery_slot/delivery_date. Map the am/pm slot to a representative HH:MM
+  // clock time consistent with the public form's <input type="time"> values.
+  const deliveryTimeFromSlot = delivery_slot === 'pm' ? '14:00' : delivery_slot === 'am' ? '09:00' : null;
+  const deliveryDateNew = isPickup ? null : (delivery_date || null);
+  const deliveryTime = isPickup ? null : deliveryTimeFromSlot;
+
   for (const line of resolvedLines) {
     line.order_id = uuidv4().slice(0, 8).toUpperCase();
   }
@@ -160,7 +172,7 @@ export default async function handler(req, res) {
         payment_method, gcash_number, reference_number,
         notes, status, total_amount, created_at,
         voucher_count, voucher_discount, reward_requested,
-        phone_normalized, delivery_slot, delivery_date,
+        phone_normalized, delivery_date_new, delivery_time,
         transaction_id, sale_channel, cash_tendered
       ) VALUES (
         ${line.order_id}, ${customer_name}, ${phone}, ${isPickup ? pickupAddress : address}, ${isPickup ? pickupBarangay : barangay},
@@ -169,11 +181,30 @@ export default async function handler(req, res) {
         ${payment_method}, ${gn}, ${rn},
         ${nt}, ${status}, ${line.line_total}, ${created_at},
         ${line.voucher_count}, ${line.voucher_discount}, 0,
-        ${normPhone}, ${isPickup ? null : (delivery_slot || null)}, ${isPickup ? null : (delivery_date || null)},
+        ${normPhone}, ${deliveryDateNew}, ${deliveryTime},
         ${transaction_id}, 'pos', ${ct}
       )
     `);
-    await sql.transaction(inserts);
+    // Voucher pool guard: the neon HTTP driver can't do interactive
+    // SELECT ... FOR UPDATE (only array-batched transactions), so re-verify the
+    // customer's redeemable pool inside the same transaction that inserts the
+    // sale. If a concurrent redemption drained the pool since we read `available`,
+    // this CAST fails, aborting the whole transaction (no over-redemption).
+    if (appliedVouchers > 0) {
+      const voucherGuard = sql`
+        SELECT CASE
+          WHEN (
+            SELECT COALESCE(SUM(CASE WHEN status <> 'cancelled' THEN voucher_count ELSE 0 END), 0)
+            FROM orders WHERE phone_normalized = ${normPhone}
+          ) + ${appliedVouchers} > ${earned}
+          THEN CAST('voucher_pool_overdraft' AS INTEGER)
+          ELSE 0
+        END
+      `;
+      await sql.transaction([voucherGuard, ...inserts]);
+    } else {
+      await sql.transaction(inserts);
+    }
   } catch (err) {
     console.error('POS sale insert failed:', err);
     return res.status(500).json({ error: 'Failed to complete sale' });
@@ -184,13 +215,19 @@ export default async function handler(req, res) {
   if (isPickup) {
     for (const line of resolvedLines) {
       try {
-        const deducted = await deductInventoryForSale(sql, {
-          product_id: line.product_type,
-          qty: line.quantity,
-          order_id: line.order_id,
-        });
-        if (deducted) {
-          await sql`UPDATE orders SET inventory_deducted = 1 WHERE id = ${line.order_id}`;
+        // Flip the flag atomically first; only deduct if we won the flip so a
+        // retry/duplicate can never double-deduct stock for the same line.
+        const claimed = await sql`
+          UPDATE orders SET inventory_deducted = 1
+          WHERE id = ${line.order_id} AND inventory_deducted = 0
+          RETURNING id
+        `;
+        if (claimed.length > 0) {
+          await deductInventoryForSale(sql, {
+            product_id: line.product_type,
+            qty: line.quantity,
+            order_id: line.order_id,
+          });
         }
       } catch (invErr) {
         console.error('POS inventory deduct failed for', line.product_type, invErr);

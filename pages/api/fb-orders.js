@@ -89,6 +89,12 @@ export default async function handler(req, res) {
     `Ordered via Facebook Messenger (${gallons} gal requested)` +
     (b.notes ? ` — ${b.notes}` : '');
 
+  // Map the am/pm slot (the only schedule info the webhook carries) to the
+  // canonical delivery_time. The payload has no delivery date, so delivery_date_new
+  // stays NULL — the order will not auto-appear on any daily route until an admin
+  // assigns a date, rather than showing up on today's route forever.
+  const deliveryTime = b.delivery_slot === 'pm' ? '14:00' : b.delivery_slot === 'am' ? '09:00' : null;
+
   try {
     await sql`
       INSERT INTO orders (
@@ -98,7 +104,7 @@ export default async function handler(req, res) {
         payment_method, gcash_number, reference_number,
         notes, total_amount, created_at, messenger_psid,
         voucher_count, voucher_discount, reward_requested,
-        phone_normalized, delivery_slot
+        phone_normalized, delivery_date_new, delivery_time
       ) VALUES (
         ${id}, ${customer_name}, ${phone}, ${address}, ${barangay},
         ${productKey}, ${product.size}, ${quantity},
@@ -106,7 +112,7 @@ export default async function handler(req, res) {
         ${'cod'}, ${null}, ${null},
         ${notes}, ${total_amount}, ${created_at}, ${messenger_psid},
         ${0}, ${0}, ${0},
-        ${normalizePhone(phone)}, ${b.delivery_slot || null}
+        ${normalizePhone(phone)}, ${null}, ${deliveryTime}
       )
     `;
   } catch (err) {

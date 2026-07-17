@@ -1,6 +1,6 @@
 import { initDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
-import { computeRewards, normalizePhone, VOUCHER_VALUE } from '@/lib/loyalty';
+import { computeRewards, normalizePhone, maxRedeemable, VOUCHER_VALUE } from '@/lib/loyalty';
 import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdmin, verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
@@ -34,6 +34,12 @@ const OrderSchema = z.object({
   pickupTime: z.string().max(5).optional().nullable(),
   deliveryDate: z.string().max(10).min(1),
   deliveryTime: z.string().max(5).min(1),
+}).superRefine((data, ctx) => {
+  // GCash payments must carry the payer's GCash number (mirrors the required
+  // field on the public order form and the cross-field style in orders/pos.js).
+  if (data.payment_method === 'gcash' && !data.gcash_number) {
+    ctx.addIssue({ code: 'custom', path: ['gcash_number'], message: 'GCash number required for GCash payment' });
+  }
 });
 
 export default async function handler(req, res) {
@@ -149,7 +155,11 @@ export default async function handler(req, res) {
     } catch (e) {
       available = 0;
     }
-    const requested = Math.max(0, Math.min(reward_requested || 0, quantity));
+    // Cap the redemption by available vouchers, refill quantity, AND voucher
+    // value vs the refill subtotal (same as orders/pos.js) — otherwise a customer
+    // could redeem a voucher worth more than the order's refill line.
+    const maxAllowed = maxRedeemable({ available, quantity, refillSubtotal });
+    const requested = Math.max(0, Math.min(reward_requested || 0, maxAllowed));
 
     let voucher_count = 0;
     let reward_requested_store = 0;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ClayIcon from '../ui/ClayIcon';
+import { apiFetch } from '@/lib/api-client';
 
 const STATUS_OPTIONS = [
   { value: 'scheduled', label: 'Scheduled' },
@@ -35,6 +36,7 @@ export default function ContainerPickupsPanel({ savedPassword }) {
   const [notifying, setNotifying] = useState(null);
   const [notifyModal, setNotifyModal] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
+  const [error, setError] = useState('');
 
   async function fetchPickups(overrides) {
     setLoading(true);
@@ -54,21 +56,31 @@ export default function ContainerPickupsPanel({ savedPassword }) {
 
   async function updateStatus(id, status) {
     setUpdating(id);
-    await fetch('/api/container-pickups/' + id, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', password: savedPassword },
-      body: JSON.stringify({ status }),
-    });
-    await fetchPickups();
+    setError('');
+    try {
+      await apiFetch('/api/container-pickups/' + id, {
+        method: 'PATCH',
+        password: savedPassword,
+        body: { status },
+      });
+      await fetchPickups();
+    } catch (e) {
+      setError(e.message || 'Failed to update status');
+    }
     setUpdating(null);
   }
 
   async function deletePickup(id) {
     setDeleting(id);
-    await fetch('/api/container-pickups/' + id, { method: 'DELETE', headers: { password: savedPassword } });
-    await fetchPickups();
+    setError('');
+    try {
+      await apiFetch('/api/container-pickups/' + id, { method: 'DELETE', password: savedPassword });
+      await fetchPickups();
+      setDeleteModal(null);
+    } catch (e) {
+      setError(e.message || 'Failed to delete pickup');
+    }
     setDeleting(null);
-    setDeleteModal(null);
   }
 
   async function notify(id, status, channel) {
@@ -89,6 +101,11 @@ export default function ContainerPickupsPanel({ savedPassword }) {
 
   return (
     <div>
+      {error && (
+        <div className="mb-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2">
+          {error}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {['all', ...STATUS_OPTIONS.map((s) => s.value)].map((v) => (
           <button
