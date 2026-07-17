@@ -38,7 +38,7 @@ export default async function handler(req, res) {
       const orderPhone = normalizePhone(order.phone);
       if (!phone || phone !== orderPhone) {
         return res.status(200).json({
-          id: order.id, status: order.status, created_at: order.created_at,
+          id: order.id, order_number: order.order_number, status: order.status, created_at: order.created_at,
           product_type: order.product_type, container_size: order.container_size,
           quantity: order.quantity, total_amount: order.total_amount,
           customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         });
       }
       return res.status(200).json({
-        id: order.id, status: order.status, created_at: order.created_at,
+        id: order.id, order_number: order.order_number, status: order.status, created_at: order.created_at,
         product_type: order.product_type, container_size: order.container_size,
         quantity: order.quantity, total_amount: order.total_amount,
         customer_name: order.customer_name, phone: order.phone, address: order.address, barangay: order.barangay,
