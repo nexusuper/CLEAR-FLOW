@@ -293,10 +293,12 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
 
 
   useEffect(() => {
-    fetchCustomers(1);
-    fetchCustStats();
-    fetchAllTags();
-    fetchReorders();
+    queueMicrotask(() => {
+      fetchCustomers(1);
+      fetchCustStats();
+      fetchAllTags();
+      fetchReorders();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

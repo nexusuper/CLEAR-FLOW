@@ -76,15 +76,17 @@ export default function Order() {
   }
 
   useEffect(() => {
-    if (queryProduct) setForm((f) => ({ ...f, product_type: queryProduct }));
+    if (queryProduct) queueMicrotask(() => setForm((f) => ({ ...f, product_type: queryProduct })));
   }, [queryProduct]);
 
   // Look up loyalty rewards when the phone number looks complete.
   useEffect(() => {
     const digits = normalizePhone(form.phone);
     if (digits.length < 7) {
-      setRewards(null);
-      resetReward();
+      queueMicrotask(() => {
+        setRewards(null);
+        resetReward();
+      });
       return;
     }
     const t = setTimeout(async () => {
@@ -141,13 +143,13 @@ export default function Order() {
   // Auto-fill the locked delivery date whenever pickup changes to a valid slot.
   useEffect(() => {
     if (form.has_empty_containers && allowedDelivery && form.delivery_date !== allowedDelivery.date) {
-      setForm((f) => ({ ...f, delivery_date: allowedDelivery.date }));
+      queueMicrotask(() => setForm((f) => ({ ...f, delivery_date: allowedDelivery.date })));
     }
   }, [form.has_empty_containers, allowedDelivery?.date]);
 
   // Keep the chosen count within bounds; any bound change cancels a prior verification.
   useEffect(() => {
-    setRewardCount((n) => Math.min(n, maxVouchers));
+    queueMicrotask(() => setRewardCount((n) => Math.min(n, maxVouchers)));
   }, [maxVouchers]);
 
   function changeCount(next) {

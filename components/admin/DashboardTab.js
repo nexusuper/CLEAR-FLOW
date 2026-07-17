@@ -7,11 +7,14 @@ export default function DashboardTab({ savedPassword }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    apiFetch('/api/dashboard', { password: savedPassword })
-      .then((d) => { if (!cancelled) setDashboard(d); })
-      .catch((e) => console.error('Failed to fetch dashboard:', e))
-      .finally(() => { if (!cancelled) setLoading(false); });
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      apiFetch('/api/dashboard', { password: savedPassword })
+        .then((d) => { if (!cancelled) setDashboard(d); })
+        .catch((e) => console.error('Failed to fetch dashboard:', e))
+        .finally(() => { if (!cancelled) setLoading(false); });
+    });
     return () => { cancelled = true; };
   }, [savedPassword]);
 

@@ -24,7 +24,7 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
     setLoading(false);
   }, [savedPassword]);
 
-  useEffect(() => { fetchScreenshots(1); }, [fetchScreenshots]);
+  useEffect(() => { queueMicrotask(() => fetchScreenshots(1)); }, [fetchScreenshots]);
 
   function toggleSelectAll() {
     if (screenshots.length > 0 && screenshots.every((s) => selected.includes(s.id))) {

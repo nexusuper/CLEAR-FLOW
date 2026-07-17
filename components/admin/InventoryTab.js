@@ -21,7 +21,7 @@ export default function InventoryTab({ savedPassword, onLowStockCount }) {
     }
   }, [savedPassword, onLowStockCount]);
 
-  useEffect(() => { fetchInventory(); }, [fetchInventory]);
+  useEffect(() => { queueMicrotask(() => fetchInventory()); }, [fetchInventory]);
 
   async function restockProduct(productId) {
     const qty = parseInt(restockQty[productId], 10);

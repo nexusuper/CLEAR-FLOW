@@ -91,8 +91,10 @@ export default function Track() {
   // Auto-load from URL query
   useEffect(() => {
     if (queryId) {
-      setInputId(queryId);
-      fetchOrder(queryId);
+      queueMicrotask(() => {
+        setInputId(queryId);
+        fetchOrder(queryId);
+      });
     }
   }, [queryId, fetchOrder]);
 

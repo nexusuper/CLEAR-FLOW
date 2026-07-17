@@ -16,7 +16,7 @@ export default function RouteTab({ savedPassword, onError }) {
     setLoading(false);
   }, [savedPassword]);
 
-  useEffect(() => { fetchRoute(); }, [fetchRoute]);
+  useEffect(() => { queueMicrotask(() => fetchRoute()); }, [fetchRoute]);
 
   async function updateStatus(id, status) {
     try {

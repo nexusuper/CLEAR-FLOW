@@ -50,7 +50,7 @@ export default function ContainerPickupsPanel({ savedPassword }) {
     setLoading(false);
   }
 
-  useEffect(() => { fetchPickups(); }, []);
+  useEffect(() => { queueMicrotask(() => fetchPickups()); }, []);
 
   async function updateStatus(id, status) {
     setUpdating(id);
