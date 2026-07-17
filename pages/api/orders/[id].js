@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     if (!readRate(req, res)) return;
 
-    const isOrderNumber = /^CFW-\d{2}-\d+$/i.test(id);
+    const isOrderNumber = /^CFW-[A-Z]+-\d{6}-[A-Z0-9]{4}-\d+$/i.test(id);
     const { data: order, error } = await supabase.from('orders')
       .select('*').eq(isOrderNumber ? 'order_number' : 'id', isOrderNumber ? id.toUpperCase() : id).single();
     if (error || !order) return res.status(404).json({ error: 'Order not found' });
