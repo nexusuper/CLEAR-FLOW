@@ -281,7 +281,7 @@ export default async function handler(req, res) {
       if (pickupErr) console.error('Container pickup insert failed:', pickupErr);
     }
 
-    return res.status(201).json({ id: order.id, created_at: order.created_at });
+    return res.status(201).json({ id: order.id, order_number: order.order_number, created_at: order.created_at });
     } catch (err) {
       console.error('Order POST failed:', err);
       return res.status(500).json({ error: 'Failed to place order. Please try again.' });

@@ -158,7 +158,7 @@ export default function Track() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <p className="text-sm text-clay-muted mb-0.5">Order ID</p>
-                  <p className="font-mono font-extrabold text-sky-600 text-xl tracking-widest">{order.id}</p>
+                  <p className="font-mono font-extrabold text-sky-600 text-xl tracking-widest">{order.order_number || order.id}</p>
                 </div>
                 <button
                   onClick={() => fetchOrder(order.id)}

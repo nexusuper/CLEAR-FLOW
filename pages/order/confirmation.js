@@ -78,7 +78,7 @@ export default function Confirmation() {
           <div className="space-y-4">
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted mb-1">Your Order ID</p>
-              <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{order.id}</p>
+              <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{order.order_number || order.id}</p>
               <p className="text-base font-bold text-clay-ink2 mt-2">⚠ Please write this down or take a screenshot — you&apos;ll need it to track your order.</p>
             </ClayCard>
 
@@ -164,7 +164,7 @@ export default function Confirmation() {
             </ClayCard>
 
             <div className="flex flex-col gap-3">
-              <ClayButton href={`/track?id=${order.id}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
+              <ClayButton href={`/track?id=${order.order_number || order.id}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
               <ClayButton href="/order" variant="outline" className="w-full">Place Another Order</ClayButton>
               <Link href="/" className="block text-center text-clay-muted hover:text-clay-ink2 py-2 transition-colors text-sm">Back to Home</Link>
             </div>
