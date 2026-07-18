@@ -8,7 +8,7 @@ import { PRODUCTS, deliveryFee, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } fro
 import {
   classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday,
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
-  DELIVERY_ONLY_START, DELIVERY_ONLY_END,
+  DELIVERY_ONLY_START, DELIVERY_ONLY_END, STORE_HOURS_LABEL,
 } from '@/lib/scheduling';
 
 // Downscales/compresses a photo before storing it as a data URL, so payment
@@ -521,6 +521,7 @@ export default function Order() {
                   <div>
                     <label htmlFor="pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
                     <input id="pickup_date" required type="date" min={today} value={form.pickup_date} onChange={(e) => set('pickup_date', e.target.value)} className="clay-input" />
+                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
                   </div>
                   <div>
                     <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
@@ -534,7 +535,7 @@ export default function Order() {
                       onChange={(e) => set('pickup_time', e.target.value)}
                       className="clay-input"
                     />
-                    <p className="text-xs text-clay-muted mt-1">Allowed: {PICKUP_MORNING_START}–{PICKUP_MORNING_END} AM or {PICKUP_AFTERNOON_START}–{PICKUP_AFTERNOON_END} PM.</p>
+                    <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
                     {form.pickup_time && !pickupSlot && (
                       <p className="text-clay-danger text-xs mt-1" role="alert">Please choose a time in the morning or afternoon window above.</p>
                     )}
@@ -564,7 +565,9 @@ export default function Order() {
                           onChange={(e) => set('delivery_time', e.target.value)}
                           className="clay-input"
                         />
-                        <p className="text-xs text-clay-muted mt-1">Allowed: {allowedDelivery.minTime}–{allowedDelivery.maxTime}.</p>
+                        <p className="text-xs text-clay-muted mt-1">
+                          {pickupSlot === 'morning' ? `Allowed: ${allowedDelivery.minTime}–${allowedDelivery.maxTime}.` : `Store hours: ${STORE_HOURS_LABEL}.`}
+                        </p>
                       </div>
                     </>
                   )}
@@ -574,11 +577,12 @@ export default function Order() {
                   <div>
                     <label htmlFor="delivery_date" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
                     <input id="delivery_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
+                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
                   </div>
                   <div>
                     <label htmlFor="delivery_time_only" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
                     <input id="delivery_time_only" required type="time" min={DELIVERY_ONLY_START} max={DELIVERY_ONLY_END} value={form.delivery_time} onChange={(e) => set('delivery_time', e.target.value)} className="clay-input" />
-                    <p className="text-xs text-clay-muted mt-1">Allowed: {DELIVERY_ONLY_START}–{DELIVERY_ONLY_END}.</p>
+                    <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
                   </div>
                 </>
               )}
