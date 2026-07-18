@@ -53,7 +53,7 @@ export default function Order() {
     reference_number: '',
     payment_screenshot: '',
     notes: '',
-    has_empty_containers: false,
+    has_empty_containers: true,
     pickup_date: '',
     pickup_time: '',
     delivery_date: '',
@@ -389,7 +389,7 @@ export default function Order() {
                         type="radio"
                         name="need_container"
                         checked={form.need_container === opt.id}
-                        onChange={() => set('need_container', opt.id)}
+                        onChange={() => setForm((f) => ({ ...f, need_container: opt.id, has_empty_containers: !opt.id, pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '' }))}
                         className="accent-clay-sky mr-2"
                       />
                       <span className="font-semibold text-clay-ink">{opt.label}</span>
@@ -501,7 +501,7 @@ export default function Order() {
                   {[
                     { id: true, label: 'Yes, pick them up' },
                     { id: false, label: 'No, deliver only' },
-                  ].map((opt) => (
+                  ].filter((opt) => opt.id === !form.need_container).map((opt) => (
                     <label key={String(opt.id)} className={`flex items-center justify-center rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.has_empty_containers === opt.id ? 'clay-tile-selected' : ''}`}>
                       <input
                         type="radio"
