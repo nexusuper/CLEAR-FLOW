@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     if (available < 1) return res.status(200).json({ sent: false });
 
     const linked = (rows || []).find((r) => r.messenger_psid);
-    if (!linked) return res.status(200).json({ sent: false });
+    if (!linked) return res.status(200).json({ sent: false, reason: 'not_linked' });
 
     const code = generateCode();
     const expires_at = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000).toISOString();
