@@ -65,7 +65,7 @@ Writes go through Postgres RPCs, not raw SQL:
 - `orders/[id]/apply-reward.js` — apply loyalty voucher to order
 - `orders/bulk-delete.js` — batch delete delivered/cancelled orders
 - `orders/pos.js` — create an in-person counter sale (POS), bypasses the public order rate limit
-- `orders/route.js` — admin GET listing of all orders (despite the App-Router-style filename, this is a Pages Router route served at `/api/orders/route`)
+- `orders/delivery-route.js` — admin GET of today's active deliveries grouped by barangay, served at `/api/orders/delivery-route`. (Was `orders/route.js`, but Next 16 reserves the `route.js` filename for the App Router and mis-registered the Pages handler, so every call 500'd — renamed to fix.)
 - `customers/index.js` — paginated customer list with search/sort
 - `customers/[phone].js` — single customer detail
 - `customers/[phone]/notes/` — CRUD for customer notes

@@ -29,9 +29,10 @@ export default function RouteTab({ savedPassword, onError }) {
   const fetchRoute = useCallback(async () => {
     setLoading(true);
     try {
-      setRoute(await apiFetch('/api/orders/route', { password: savedPassword }));
+      setRoute(await apiFetch('/api/orders/delivery-route', { password: savedPassword }));
     } catch (e) {
       console.error('Failed to fetch route:', e);
+      onError?.('Failed to load route: ' + (e.message || 'server error'));
     }
     setLoading(false);
   }, [savedPassword]);
