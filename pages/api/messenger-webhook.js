@@ -1,7 +1,7 @@
 // Facebook Messenger Webhook
 // Receives messages and stores customer PSID for notifications
 import { getSupabase } from '@/lib/supabaseAdmin';
-import { sendMessengerMessage, verifyWebhookSignature } from '@/lib/facebook';
+import { verifyWebhookSignature } from '@/lib/facebook';
 import { timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -83,6 +83,14 @@ export default async function handler(req, res) {
         if (event.postback?.payload) {
           await handlePostback(senderPsid, event.postback.payload);
         }
+
+        // m.me?ref=<orderId> deep-link (from the confirmation page) — binds automatically.
+        // `referral` fires for existing conversations; `postback.referral` rides GET_STARTED for new users.
+        const ref = event.referral?.ref || event.postback?.referral?.ref;
+        if (ref) {
+          const orderId = extractUuid(ref);
+          if (orderId) await linkOrderToPsid(senderPsid, orderId);
+        }
       }
     }
 
@@ -93,32 +101,46 @@ export default async function handler(req, res) {
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
+const ORDER_ID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+function extractUuid(str) {
+  const m = String(str || '').match(ORDER_ID_RE);
+  return m ? m[0].toLowerCase() : null;
+}
+
+// Bind a customer's Messenger PSID to an order (and their customer record).
+// Shared by the typed-Order-ID path and the m.me?ref= deep-link path.
+// Returns true if a binding happened. Never throws to the caller.
+async function linkOrderToPsid(senderPsid, orderId) {
+  const supabase = getSupabase();
+  const { data: order } = await supabase
+    .from('orders')
+    .select('id, messenger_psid, status, created_at, customer_id')
+    .eq('id', orderId)
+    .single();
+
+  // Only orders still in-flight and created recently can be linked — closes
+  // the window where a stale/completed order ID (e.g. from an old screenshot)
+  // could be used by a stranger to bind their Messenger to someone else's order.
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  if (order && !order.messenger_psid && !['delivered', 'cancelled'].includes(order.status) && order.created_at > thirtyDaysAgo) {
+    await supabase.from('orders').update({ messenger_psid: senderPsid }).eq('id', orderId);
+    if (order.customer_id) {
+      await supabase.from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
+    }
+    // sendReply is try/caught internally, so an FB API error here can't 500 the webhook
+    // after the DB write already committed.
+    await sendReply(senderPsid, `Got it — your order is linked. Current status: ${order.status}.`);
+    return true;
+  }
+  return false;
+}
+
 async function handleMessage(senderPsid, messageText) {
-  const text = messageText.trim();
-
-  // Only Order ID linkage is supported (uuid — orders no longer have a short code)
-  const ORDER_ID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-  const match = text.match(ORDER_ID_RE);
-  if (match) {
-    const orderId = match[0].toLowerCase();
-    const supabase = getSupabase();
-    const { data: order } = await supabase
-      .from('orders')
-      .select('id, messenger_psid, status, created_at, customer_id')
-      .eq('id', orderId)
-      .single();
-
-    // Only orders still in-flight and created recently can be linked — closes
-    // the window where a stale/completed order ID (e.g. from an old screenshot)
-    // could be used by a stranger to bind their Messenger to someone else's order.
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
-    if (order && !order.messenger_psid && !['delivered', 'cancelled'].includes(order.status) && order.created_at > thirtyDaysAgo) {
-      await supabase.from('orders').update({ messenger_psid: senderPsid }).eq('id', orderId);
-      if (order.customer_id) {
-        await supabase.from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
-      }
-      await sendMessengerMessage(senderPsid, `Got it — your order is linked. Current status: ${order.status}.`);
-    } else {
+  const orderId = extractUuid(messageText);
+  if (orderId) {
+    const linked = await linkOrderToPsid(senderPsid, orderId);
+    if (!linked) {
       await sendReply(senderPsid,
         `❌ Sorry, I couldn't find order #${orderId}.\n\n` +
         `Please double-check the Order ID from your confirmation page and try again.`

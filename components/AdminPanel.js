@@ -141,7 +141,39 @@ export default function AdminPanel() {
     applyPageData(data);
     setOrdersLoading(false);
     setAuthed(true);
+    // ponytail: sessionStorage — readable by JS but repo has no XSS sinks + strict CSP,
+    // and it clears on tab close. Keeps the owner logged in across page refreshes.
+    try { sessionStorage.setItem('cf_admin_pw', password); } catch { /* private mode */ }
   }
+
+  function handleLogout() {
+    try { sessionStorage.removeItem('cf_admin_pw'); } catch { /* ignore */ }
+    setAuthed(false);
+    setOrders([]);
+    setSavedPassword('');
+  }
+
+  // Restore an existing session on refresh: re-validate the stored password against
+  // the API; on success rehydrate, on any rejection drop the stale credential.
+  useEffect(() => {
+    let stored;
+    try { stored = sessionStorage.getItem('cf_admin_pw'); } catch { stored = null; }
+    if (!stored) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/orders?page=1&limit=50&sort=date_desc', { headers: { password: stored } });
+        if (cancelled) return;
+        if (res.ok) {
+          handleLogin(stored, await res.json());
+        } else {
+          try { sessionStorage.removeItem('cf_admin_pw'); } catch { /* ignore */ }
+        }
+      } catch { /* offline — leave on login screen */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Wraps a mutation so failures surface in the admin error banner
   // instead of silently refetching stale data.
@@ -170,6 +202,9 @@ export default function AdminPanel() {
         return fetchOrders(data.page - 1, overrides);
       }
       applyPageData(data);
+    } else if (res.status === 401) {
+      // Stored password no longer valid (changed/rotated) — drop to login.
+      handleLogout();
     }
     setOrdersLoading(false);
   }
@@ -356,7 +391,7 @@ export default function AdminPanel() {
                 </button>
               )}
               <button
-                onClick={() => { setAuthed(false); setOrders([]); setSavedPassword(''); }}
+                onClick={handleLogout}
                 className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm transition-colors"
               >
                 Logout

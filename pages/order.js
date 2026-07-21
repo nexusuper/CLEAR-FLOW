@@ -66,6 +66,7 @@ export default function Order() {
   const [codePhase, setCodePhase] = useState('idle'); // idle|sending|entry|verifying|verified|fallback
   const [codeInput, setCodeInput] = useState('');
   const [codeError, setCodeError] = useState('');
+  const [codeReason, setCodeReason] = useState('');
   const [screenshotError, setScreenshotError] = useState('');
 
   function resetReward() {
@@ -169,8 +170,10 @@ export default function Order() {
         body: JSON.stringify({ phone: form.phone }),
       });
       const data = await res.json();
+      setCodeReason(data.reason || '');
       setCodePhase(res.ok && data.sent ? 'entry' : 'fallback');
     } catch {
+      setCodeReason('');
       setCodePhase('fallback');
     }
   }
@@ -340,9 +343,16 @@ export default function Order() {
                         </p>
                       )}
                       {codePhase === 'fallback' && (
-                        <p className="text-xs text-clay-muted font-semibold">
-                          No problem — we&apos;ll apply your {rewardCount} free refill{rewardCount > 1 ? 's' : ''} when we confirm your delivery.
-                        </p>
+                        <div className="space-y-1">
+                          <p className="text-xs text-clay-muted font-semibold">
+                            No problem — we&apos;ll apply your {rewardCount} free refill{rewardCount > 1 ? 's' : ''} when we confirm your delivery.
+                          </p>
+                          {codeReason === 'not_linked' && (
+                            <p className="text-xs text-clay-muted">
+                              Tip: link Messenger from your confirmation page after ordering to get reward codes instantly next time.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </>
                   )}

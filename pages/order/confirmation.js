@@ -86,6 +86,19 @@ export default function Confirmation() {
               <ClayIcon name="phone" className="w-5 h-5" /> Questions? Call us: {BUSINESS_PHONE_DISPLAY}
             </a>
 
+            <a
+              href={`https://m.me/${process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166'}?ref=${order.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 rounded-full px-4 py-3 text-base font-bold text-white"
+              style={{ background: 'linear-gradient(145deg,#0084ff,#0068d6)' }}
+            >
+              <ClayIcon name="chat" className="w-5 h-5" /> Get updates & unlock rewards on Messenger
+            </a>
+            <p className="text-center text-xs text-clay-muted -mt-2">
+              Tap to link Messenger — we&apos;ll send order updates and your free-refill reward codes here.
+            </p>
+
             <ClayCard className="p-6">
               <h2 className="font-editorial font-semibold text-clay-ink2 mb-3">Order Details</h2>
               <div className="space-y-2 text-base">

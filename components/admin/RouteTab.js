@@ -1,6 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import ClayIcon from '../ui/ClayIcon';
 import { apiFetch } from '@/lib/api-client';
+import { STORE_MAP_ORIGIN } from '@/lib/products';
+
+function stopAddress(o) {
+  return [o.address, o.barangay, 'Cagayan de Oro'].filter(Boolean).join(', ');
+}
+
+// Single-stop directions link (origin = driver's current location on the phone).
+function navUrl(o) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stopAddress(o))}&travelmode=driving`;
+}
+
+// Full-route link: store origin then every stop in list order.
+// ponytail: stops stay in barangay-then-time order; free Google Maps URLs don't
+// optimize stop order (that's the paid Directions API). Driver can drag to reorder in-app.
+// Ceiling: a very large day (~25+ stops) can exceed URL length limits; fine for a small shop.
+function fullRouteUrl(barangays) {
+  const stops = barangays.flatMap((g) => g.orders.map(stopAddress));
+  const segments = [STORE_MAP_ORIGIN, ...stops].map((s) => encodeURIComponent(s));
+  return `https://www.google.com/maps/dir/${segments.join('/')}`;
+}
 
 export default function RouteTab({ savedPassword, onError }) {
   const [route, setRoute] = useState(null);
@@ -35,6 +55,16 @@ export default function RouteTab({ savedPassword, onError }) {
           <ClayIcon name="refresh" className="w-3.5 h-3.5 inline" /> Refresh
         </button>
       </div>
+      {route && route.total > 0 && (
+        <a
+          href={fullRouteUrl(route.barangays)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 clay-btn-primary rounded-full px-4 py-3 text-sm font-semibold"
+        >
+          <ClayIcon name="truck" className="w-4 h-4" /> Open route in Google Maps ({route.total} stop{route.total === 1 ? '' : 's'})
+        </a>
+      )}
       {loading ? (
         <p className="text-center py-12 text-gray-400">Loading route...</p>
       ) : !route || route.total === 0 ? (
@@ -54,9 +84,14 @@ export default function RouteTab({ savedPassword, onError }) {
                       </div>
                       <div className="text-sm text-gray-600">{o.address}</div>
                       <div className="text-xs text-gray-400">{o.product_type} x{o.quantity}</div>
-                      <a href={`tel:${o.phone}`} className="text-xs text-clay-skydeep font-semibold mt-1 inline-flex items-center gap-1">
-                        <ClayIcon name="phone" className="w-3.5 h-3.5" /> {o.phone}
-                      </a>
+                      <div className="flex items-center gap-3 mt-1">
+                        <a href={`tel:${o.phone}`} className="text-xs text-clay-skydeep font-semibold inline-flex items-center gap-1">
+                          <ClayIcon name="phone" className="w-3.5 h-3.5" /> {o.phone}
+                        </a>
+                        <a href={navUrl(o)} target="_blank" rel="noopener noreferrer" className="text-xs text-clay-skydeep font-semibold inline-flex items-center gap-1">
+                          <ClayIcon name="send" className="w-3.5 h-3.5" /> Navigate
+                        </a>
+                      </div>
                     </div>
                     <div className="flex flex-col gap-1">
                       {o.status === 'confirmed' && (
