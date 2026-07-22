@@ -33,6 +33,40 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
   const [nudging, setNudging] = useState(null);
   const [showReorders, setShowReorders] = useState(false);
   const [custTotal, setCustTotal] = useState(0);
+  const [selected, setSelected] = useState([]);
+  const [deletingCust, setDeletingCust] = useState(false);
+
+  function toggleSelect(phone) {
+    setSelected((s) => (s.includes(phone) ? s.filter((p) => p !== phone) : [...s, phone]));
+  }
+  function toggleSelectAllOnPage() {
+    const pagePhones = customers.map((c) => c.phone_normalized);
+    const allSel = pagePhones.length > 0 && pagePhones.every((p) => selected.includes(p));
+    setSelected((s) => (allSel ? s.filter((p) => !pagePhones.includes(p)) : [...new Set([...s, ...pagePhones])]));
+  }
+  async function deleteSelected() {
+    if (selected.length === 0) return;
+    const ok = window.confirm(
+      `Delete ${selected.length} customer(s)?\n\nThis PERMANENTLY removes them AND all their orders, notes, and history. This cannot be undone.`
+    );
+    if (!ok) return;
+    setDeletingCust(true);
+    try {
+      const res = await fetch('/api/customers/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', password: savedPassword },
+        body: JSON.stringify({ phones: selected }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      setSelected([]);
+      await fetchCustomers(1);
+      fetchCustStats();
+    } catch (e) {
+      onError?.(e.message || 'Failed to delete customers');
+    }
+    setDeletingCust(false);
+  }
 
   async function fetchCustomers(p, overrides) {
     setCustLoading(true);
@@ -50,6 +84,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
       if (res.ok) {
         const data = await res.json();
         setCustomers(data.customers);
+        setSelected([]);
         setCustTotal(data.total);
         onCountChange?.(data.total);
         setCustTotalPages(data.totalPages);
@@ -437,6 +472,16 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
               <ClayIcon name="download" className="w-4 h-4" />
               {exporting ? 'Exporting...' : 'Export CSV'}
             </button>
+            {selected.length > 0 && (
+              <button
+                onClick={deleteSelected}
+                disabled={deletingCust}
+                className="clay-pressable rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap bg-red-500 text-white hover:bg-red-600"
+              >
+                <ClayIcon name="trash" className="w-4 h-4" />
+                {deletingCust ? 'Deleting...' : `Delete Selected (${selected.length})`}
+              </button>
+            )}
           </div>
 
           {/* Customer Table */}
@@ -454,6 +499,15 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
+                        <th className="px-4 py-3 w-10">
+                          <input
+                            type="checkbox"
+                            aria-label="Select all on page"
+                            className="w-4 h-4 cursor-pointer accent-sky-600"
+                            checked={customers.length > 0 && customers.every((c) => selected.includes(c.phone_normalized))}
+                            onChange={toggleSelectAllOnPage}
+                          />
+                        </th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Customer</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Phone</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Orders</th>
@@ -470,6 +524,15 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                           onClick={() => fetchCustomerDetail(c.phone_normalized)}
                           className={'cursor-pointer hover:bg-sky-50 transition-colors ' + (i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')}
                         >
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${c.customer_name}`}
+                              className="w-4 h-4 cursor-pointer accent-sky-600"
+                              checked={selected.includes(c.phone_normalized)}
+                              onChange={() => toggleSelect(c.phone_normalized)}
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-gray-800 flex items-center gap-1">
                               {c.customer_name}
@@ -508,7 +571,15 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                 </div>
                 <div className="sm:hidden divide-y divide-gray-100">
                   {customers.map((c) => (
-                    <div key={c.phone_normalized} onClick={() => fetchCustomerDetail(c.phone_normalized)} className="p-4 space-y-1 cursor-pointer hover:bg-sky-50">
+                    <div key={c.phone_normalized} className="p-4 flex items-start gap-3 hover:bg-sky-50">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${c.customer_name}`}
+                        className="w-4 h-4 mt-1 cursor-pointer accent-sky-600 shrink-0"
+                        checked={selected.includes(c.phone_normalized)}
+                        onChange={() => toggleSelect(c.phone_normalized)}
+                      />
+                      <div onClick={() => fetchCustomerDetail(c.phone_normalized)} className="flex-1 space-y-1 cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-gray-800 flex items-center gap-1">
                           {c.customer_name}
@@ -521,6 +592,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                       </div>
                       <div className="text-xs text-gray-400 font-mono">{c.phone_display || c.phone_normalized}</div>
                       <div className="text-xs text-gray-600">{c.total_orders} orders · ₱{c.total_spent}</div>
+                      </div>
                     </div>
                   ))}
                 </div>
