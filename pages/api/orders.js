@@ -40,6 +40,8 @@ const OrderSchema = z.object({
   pickupTime: z.string().max(5).optional().nullable(),
   deliveryDate: z.string().max(10).min(1),
   deliveryTime: z.string().max(5).min(1),
+  lat: z.coerce.number().gte(-90).lte(90).nullish(),
+  lng: z.coerce.number().gte(-180).lte(180).nullish(),
 });
 
 export default async function handler(req, res) {
@@ -125,6 +127,7 @@ export default async function handler(req, res) {
       payment_method, gcash_number, reference_number, payment_screenshot,
       notes, reward_requested, reward_code,
       has_empty_containers, pickupDate, pickupTime, deliveryDate, deliveryTime,
+      lat, lng,
     } = parsed.data;
 
     const product = PRODUCTS_BY_ID[product_type];
@@ -261,6 +264,8 @@ export default async function handler(req, res) {
       // has_empty_containers from orders.pickup_date, which was always null.
       p_pickup_date: hasEmptyContainers ? pickupDate : null,
       p_pickup_time: hasEmptyContainers ? pickupTime : null,
+      p_lat: lat ?? null,
+      p_lng: lng ?? null,
     });
 
     if (rpcErr) {

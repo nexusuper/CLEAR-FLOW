@@ -96,6 +96,9 @@ export default async function handler(req, res) {
     p_cash_tendered: null,
     p_voucher_count: 0,
     p_reward_requested: 0,
+    // No pin source from Messenger/ManyChat intake.
+    p_lat: null,
+    p_lng: null,
   });
 
   if (error) {

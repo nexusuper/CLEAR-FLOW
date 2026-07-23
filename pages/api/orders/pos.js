@@ -165,6 +165,9 @@ export default async function handler(req, res) {
       // RPC would otherwise re-derive it from this line's own quantity, charging
       // a counter pickup a fee it waived and a multi-line sale one fee per line.
       p_delivery_fee: line.delivery_fee,
+      // POS counter-sale has no pin UI.
+      p_lat: null,
+      p_lng: null,
     });
     if (error) {
       console.error('POS sale insert failed:', error);

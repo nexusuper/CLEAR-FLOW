@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
+import LocationPicker from '@/components/order/LocationPicker';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { PRODUCTS, deliveryFee, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 import {
@@ -44,6 +45,8 @@ export default function Order() {
     phone: '',
     address: '',
     barangay: '',
+    lat: null,
+    lng: null,
     product_type: 'slim5',
     quantity: 1,
     need_container: false,
@@ -231,6 +234,8 @@ export default function Order() {
           pickupTime: form.has_empty_containers ? form.pickup_time : null,
           deliveryDate: form.delivery_date,
           deliveryTime: form.delivery_time,
+          lat: form.lat,
+          lng: form.lng,
         }),
       });
       const data = await res.json();
@@ -278,6 +283,14 @@ export default function Order() {
               <div>
                 <label htmlFor="barangay" className="block text-sm font-medium text-clay-ink2 mb-1">Barangay *</label>
                 <input id="barangay" required value={form.barangay} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" autoComplete="address-level3" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-clay-ink2 mb-1">Pin your location on the map (optional)</label>
+                <p className="text-xs text-clay-muted mb-2">Helps our driver find you — doesn&apos;t replace the address above.</p>
+                <LocationPicker
+                  value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
+                  onChange={(pt) => setForm((f) => ({ ...f, lat: pt?.lat ?? null, lng: pt?.lng ?? null }))}
+                />
               </div>
             </div>
           </ClayCard>
