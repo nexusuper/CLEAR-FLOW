@@ -67,6 +67,7 @@ export default function Track() {
   const { id: queryId } = router.query;
 
   const [inputId, setInputId] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -87,6 +88,28 @@ export default function Track() {
     }
     setLoading(false);
   }, []);
+
+  const fetchByPhone = useCallback(async (raw) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/orders/by-phone?phone=${encodeURIComponent(raw.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No recent order found.');
+      setOrder(data);
+      setLastUpdated(new Date());
+    } catch (err) {
+      setError(err.message || 'Something went wrong');
+      setOrder(null);
+    }
+    setLoading(false);
+  }, []);
+
+  function handlePhoneSubmit(e) {
+    e.preventDefault();
+    if (!phoneInput.trim()) return;
+    fetchByPhone(phoneInput);
+  }
 
   // Auto-load from URL query
   useEffect(() => {
@@ -151,6 +174,32 @@ export default function Track() {
           </a>
         </form>
 
+        {/* Track by phone — for customers who lost their Order ID */}
+        <form onSubmit={handlePhoneSubmit} className="clay-inset rounded-3xl p-6">
+          <label htmlFor="track_phone" className="block text-base font-semibold text-clay-ink2 mb-2">Lost your Order ID? Track by phone</label>
+          <p className="text-sm text-clay-muted mb-2">Enter the phone number you ordered with to see your latest order.</p>
+          <div className="flex gap-2">
+            <input
+              id="track_phone"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+              placeholder="09XX-XXX-XXXX"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              className="clay-input flex-1 text-lg"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              aria-busy={loading || undefined}
+              className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60"
+            >
+              {loading ? <span className="clay-spinner" aria-hidden="true" /> : 'Track'}
+            </button>
+          </div>
+        </form>
+
         {/* Order status */}
         {order && (
           <>
@@ -170,7 +219,9 @@ export default function Track() {
 
               <div className="text-sm text-clay-muted mb-5 space-y-1">
                 <div><span className="font-medium text-clay-ink2">Name:</span> {order.customer_name}</div>
-                <div><span className="font-medium text-clay-ink2">Address:</span> {order.address}, {order.barangay}</div>
+                {(order.address || order.barangay) && (
+                  <div><span className="font-medium text-clay-ink2">{order.address ? 'Address:' : 'Area:'}</span> {[order.address, order.barangay].filter(Boolean).join(', ')}</div>
+                )}
                 <div><span className="font-medium text-clay-ink2">Total:</span> <span className="text-sky-600 font-bold">₱{order.total_amount}</span></div>
               </div>
 

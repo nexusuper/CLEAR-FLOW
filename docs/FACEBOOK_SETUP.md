@@ -2,6 +2,8 @@
 
 This guide walks you through setting up Facebook features for Clear Flow.
 
+> **For the loyalty/rewards + webhook go-live, follow [`messenger-setup.md`](messenger-setup.md) — it is the authoritative, current checklist.** It also requires `FB_APP_SECRET` (webhook signature verification) and the `messaging_referrals` subscription, both needed for the confirmation-page "link Messenger" deep-link to auto-bind. This general guide below covers the Pixel and chat plugin.
+
 ## Features Included
 
 1. **Messenger Chat Plugin** - Live chat widget on your website
@@ -95,6 +97,7 @@ This allows you to send order status updates directly via Messenger.
 6. Subscribe to these events:
    - `messages`
    - `messaging_postbacks`
+   - `messaging_referrals`  ← required, or the confirmation-page "link Messenger" deep-link won't auto-bind the customer's PSID
 
 ### Set Up Get Started Button (Optional)
 
